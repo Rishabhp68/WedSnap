@@ -1,0 +1,340 @@
+// Prisma schema for WedSnap — wedding invitation + private guest social app.
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+/// A person. Identity/auth is owned by Clerk; this row mirrors what we need
+/// locally and is keyed by clerkId. A user can belong to multiple weddings
+/// (see WeddingGuest), so nothing wedding-specific lives here.
+model User {
+  id        String   @id @default(cuid())
+  clerkId   String   @unique
+  name      String
+  email     String?  @unique
+  avatarUrl String?
+  bio       String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  weddingGuests WeddingGuest[]
+  posts         Post[]
+  stories       Story[]
+  comments      Comment[]
+  reactions     Reaction[]
+  messages      Message[]
+  chatMembers   ChatMember[]
+  rsvps         RSVP[]
+
+  @@index([clerkId])
+}
+
+enum GuestRole {
+  GUEST
+  ADMIN
+}
+
+/// Membership of a User in a Wedding. This is the join table that scopes
+/// everything else (posts, stories, chat, RSVP) to "this wedding's guests".
+model WeddingGuest {
+  id        String    @id @default(cuid())
+  weddingId String
+  userId    String
+  role      GuestRole @default(GUEST)
+  invitedBy String?
+  joinedAt  DateTime  @default(now())
+
+  wedding Wedding @relation(fields: [weddingId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([weddingId, userId])
+  @@index([weddingId])
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Wedding & content
+// ---------------------------------------------------------------------------
+
+/// The root tenant. Everything else hangs off a Wedding so the app can
+/// eventually host more than one without a schema change.
+model Wedding {
+  id             String   @id @default(cuid())
+  slug           String   @unique
+  partnerOneName String
+  partnerTwoName String
+  tagline        String?
+  /// Instant the wedding "begins", stored in UTC. Combined with `timezone`
+  /// for display so countdowns are correct regardless of guest device TZ.
+  weddingDate    DateTime
+  timezone       String   @default("Asia/Kolkata")
+  heroImageUrl   String?
+  coverImageUrl  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  guests    WeddingGuest[]
+  events    Event[]
+  timeline  TimelineMoment[]
+  venue     Venue?
+  posts     Post[]
+  stories   Story[]
+  chatRooms ChatRoom[]
+  rsvps     RSVP[]
+}
+
+/// A single "Our Story" milestone (how we met, first date, engagement...).
+/// Content-driven rather than hardcoded so it can be edited from /admin.
+model TimelineMoment {
+  id          String    @id @default(cuid())
+  weddingId   String
+  title       String
+  description String
+  date        DateTime?
+  imageUrl    String?
+  order       Int       @default(0)
+
+  wedding Wedding @relation(fields: [weddingId], references: [id], onDelete: Cascade)
+
+  @@index([weddingId, order])
+}
+
+/// A single wedding function (Mehendi, Haldi, Sangeet, Wedding, Reception...).
+model Event {
+  id           String    @id @default(cuid())
+  weddingId    String
+  name         String
+  description  String?
+  date         DateTime
+  startTime    DateTime
+  endTime      DateTime?
+  venueName    String
+  venueAddress String
+  dressCode    String?
+  imageUrl     String?
+  mapUrl       String?
+  order        Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  wedding Wedding @relation(fields: [weddingId], references: [id], onDelete: Cascade)
+
+  @@index([weddingId, date])
+}
+
+/// Primary venue details shown on the public site (separate from per-event
+/// venues, which may differ — e.g. Mehendi at home, Wedding at a hall).
+model Venue {
+  id           String  @id @default(cuid())
+  weddingId    String  @unique
+  name         String
+  address      String
+  mapUrl       String?
+  latitude     Float?
+  longitude    Float?
+  parkingInfo  String?
+  instructions String?
+
+  wedding Wedding @relation(fields: [weddingId], references: [id], onDelete: Cascade)
+}
+
+enum RsvpStatus {
+  PENDING
+  ATTENDING
+  NOT_ATTENDING
+  MAYBE
+}
+
+model RSVP {
+  id         String     @id @default(cuid())
+  weddingId  String
+  userId     String
+  status     RsvpStatus @default(PENDING)
+  guestCount Int        @default(1)
+  message    String?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  wedding Wedding @relation(fields: [weddingId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([weddingId, userId])
+  @@index([weddingId])
+}
+
+// ---------------------------------------------------------------------------
+// Social: stories, posts, comments, reactions
+// ---------------------------------------------------------------------------
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+/// Ephemeral "Wedding Moments" story. Short-lived by design (see expiresAt);
+/// kept separate from Post so the feed and the story rail can evolve
+/// independently even though they share the same underlying media pipeline.
+model Story {
+  id         String    @id @default(cuid())
+  weddingId  String
+  userId     String
+  /// Cloudinary public_id (or "seed/..." for seed data) — same pattern as
+  /// PostMedia.storageKey, needed to re-sign a delivery URL at render time.
+  storageKey String
+  mediaUrl   String
+  mediaType  MediaType @default(IMAGE)
+  caption    String?
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime
+
+  wedding Wedding @relation(fields: [weddingId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([weddingId, createdAt])
+  @@index([userId])
+}
+
+/// A guest's feed post. A post can carry multiple media items (PostMedia),
+/// even though the MVP UI only creates single-photo posts, so a gallery/
+/// multi-photo or video post never needs a schema change.
+model Post {
+  id        String   @id @default(cuid())
+  weddingId String
+  userId    String
+  caption   String?
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  wedding   Wedding     @relation(fields: [weddingId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  media     PostMedia[]
+  comments  Comment[]
+  reactions Reaction[]
+
+  @@index([weddingId, createdAt])
+  @@index([userId])
+}
+
+/// One uploaded file attached to a Post. Only metadata lives here — the
+/// actual bytes live with the storage provider (see lib/storage).
+model PostMedia {
+  id         String    @id @default(cuid())
+  postId     String
+  storageKey String
+  url        String
+  mimeType   String
+  mediaType  MediaType @default(IMAGE)
+  width      Int?
+  height     Int?
+  sizeBytes  Int?
+  order      Int       @default(0)
+  createdAt  DateTime  @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  content   String
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([postId, createdAt])
+  @@index([userId])
+}
+
+enum ReactionType {
+  LIKE
+  LOVE
+  HAHA
+  WOW
+  CELEBRATE
+}
+
+model Reaction {
+  id        String       @id @default(cuid())
+  postId    String
+  userId    String
+  type      ReactionType @default(LOVE)
+  createdAt DateTime     @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // One reaction per guest per post (changing type = update, not a new row).
+  @@unique([postId, userId])
+  @@index([postId])
+}
+
+// ---------------------------------------------------------------------------
+// Chat
+// ---------------------------------------------------------------------------
+
+enum ChatRoomType {
+  GROUP
+  DIRECT
+}
+
+/// A room is either the wedding-wide GROUP room (one per wedding, created at
+/// setup time) or a future DIRECT room between two ChatMembers. The schema
+/// supports DMs today even though the MVP UI only surfaces the group room.
+model ChatRoom {
+  id        String       @id @default(cuid())
+  weddingId String
+  type      ChatRoomType @default(GROUP)
+  name      String?
+  createdAt DateTime     @default(now())
+
+  wedding  Wedding      @relation(fields: [weddingId], references: [id], onDelete: Cascade)
+  members  ChatMember[]
+  messages Message[]
+
+  @@index([weddingId, type])
+}
+
+model ChatMember {
+  id         String    @id @default(cuid())
+  chatRoomId String
+  userId     String
+  joinedAt   DateTime  @default(now())
+  lastReadAt DateTime?
+
+  chatRoom ChatRoom @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([chatRoomId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id         String   @id @default(cuid())
+  chatRoomId String
+  userId     String
+  content    String
+  isDeleted  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  chatRoom ChatRoom @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([chatRoomId, createdAt])
+  @@index([userId])
+}
