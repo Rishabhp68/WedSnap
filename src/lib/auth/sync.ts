@@ -31,6 +31,23 @@ function resolveEmail(user: ClerkUserLike): string | null {
   return user.primaryEmailAddress?.emailAddress ?? user.emailAddresses?.[0]?.emailAddress ?? null;
 }
 
+/**
+ * Whether ADMIN_CLERK_IDS names this Clerk user as a bootstrap admin.
+ *
+ * The point of the variable is to get the *first* admin into a fresh
+ * deployment, where nobody has the access needed to promote anyone through
+ * /admin. It's checked on every request rather than only at sign-up: a Clerk
+ * user id isn't knowable until that person has signed up, so the id almost
+ * always gets configured *after* their guest row already exists.
+ */
+export function isBootstrapAdmin(clerkId: string): boolean {
+  return (process.env.ADMIN_CLERK_IDS ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean)
+    .includes(clerkId);
+}
+
 /** Create or update the local User row that mirrors a Clerk identity. */
 export async function syncUserFromClerk(clerkUser: ClerkUserLike) {
   const name = resolveName(clerkUser);
@@ -66,11 +83,7 @@ export async function ensureWeddingMembership(userId: string, clerkId: string) {
   });
   if (existing) return existing;
 
-  const adminIds = (process.env.ADMIN_CLERK_IDS ?? "")
-    .split(",")
-    .map((id) => id.trim())
-    .filter(Boolean);
-  const role: GuestRole = adminIds.includes(clerkId) ? "ADMIN" : "GUEST";
+  const role: GuestRole = isBootstrapAdmin(clerkId) ? "ADMIN" : "GUEST";
 
   return prisma.$transaction(async (tx) => {
     const guest = await tx.weddingGuest.create({

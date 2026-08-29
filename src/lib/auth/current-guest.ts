@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/db/client";
 import { getCurrentWedding } from "@/lib/wedding/current";
-import { ensureWeddingMembership, syncUserFromClerk } from "./sync";
+import { ensureWeddingMembership, isBootstrapAdmin, syncUserFromClerk } from "./sync";
 
 /**
  * Resolves the signed-in visitor's User + WeddingGuest for the wedding this
@@ -33,6 +33,16 @@ export const getCurrentGuest = cache(async () => {
   });
   if (!guest) {
     guest = await ensureWeddingMembership(user.id, clerkId);
+  } else if (guest.role !== "ADMIN" && isBootstrapAdmin(clerkId)) {
+    // Catches the ordinary case: the deployment's first admin signs up, reads
+    // their id out of the Clerk dashboard, and only then sets
+    // ADMIN_CLERK_IDS — by which point their guest row already exists. Without
+    // this, the variable would silently do nothing and the only way in would
+    // be editing the database by hand.
+    guest = await prisma.weddingGuest.update({
+      where: { id: guest.id },
+      data: { role: "ADMIN" },
+    });
   }
 
   return { user, guest, wedding };
