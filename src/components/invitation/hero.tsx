@@ -5,10 +5,19 @@ import { JoinCelebrationCta } from "./join-celebration-cta";
 import { Reveal } from "@/components/motion/reveal";
 import { Button } from "@/components/ui/button";
 
-export function Hero({ wedding }: { wedding: Wedding }) {
+interface HeroProps {
+  wedding: Wedding;
+  /** Hides the "Explore Our Wedding" / "Join the Celebration" actions for contexts where the guest is already signed in. */
+  showActions?: boolean;
+}
+
+export function Hero({ wedding, showActions = true }: HeroProps) {
   return (
-    <section className="relative flex min-h-dvh items-end overflow-hidden pb-16 pt-safe sm:items-center sm:pb-0">
-      <div className="absolute inset-0">
+    // `overflow-hidden` sits on the background wrapper below, not here: on the
+    // section it also clipped the heading, shaving the last glyph off a name
+    // whose italic/serif side-bearing overhangs the line box.
+    <section className="relative flex min-h-dvh items-end pb-16 pt-safe sm:items-center sm:pb-0">
+      <div className="absolute inset-0 overflow-hidden">
         {wedding.heroImageUrl ? (
           <Image
             src={wedding.heroImageUrl}
@@ -32,10 +41,13 @@ export function Hero({ wedding }: { wedding: Wedding }) {
         </Reveal>
 
         <Reveal delay={0.15}>
-          <h1 className="font-display mt-4 text-balance text-5xl leading-[1.1] sm:text-7xl">
-            {wedding.partnerOneName}
-            <span className="mx-3 italic text-white/70">&amp;</span>
-            {wedding.partnerTwoName}
+          {/* Each name is its own inline-block so a line break falls between
+              names rather than mid-name, with break-words as the backstop for
+              a single name too long for one line on a narrow phone. */}
+          <h1 className="font-display mt-4 text-balance text-5xl leading-[1.1] break-words hyphens-none sm:text-7xl">
+            <span className="inline-block">{wedding.partnerOneName}</span>
+            <span className="mx-3 inline-block italic text-white/70">&amp;</span>
+            <span className="inline-block">{wedding.partnerTwoName}</span>
           </h1>
         </Reveal>
 
@@ -53,19 +65,21 @@ export function Hero({ wedding }: { wedding: Wedding }) {
           </p>
         </Reveal>
 
-        <Reveal delay={0.4}>
-          <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Button
-              size="lg"
-              variant="outline"
-              className="h-12 w-full rounded-full border-white/40 bg-white/10 px-6 text-white backdrop-blur-sm hover:bg-white/20 hover:text-white sm:w-auto"
-              asChild
-            >
-              <a href="#our-story">Explore Our Wedding</a>
-            </Button>
-            <JoinCelebrationCta className="h-12 w-full rounded-full px-6 sm:w-auto" />
-          </div>
-        </Reveal>
+        {showActions ? (
+          <Reveal delay={0.4}>
+            <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <Button
+                size="lg"
+                variant="outline"
+                className="h-12 w-full rounded-full border-white/40 bg-white/10 px-6 text-white backdrop-blur-sm hover:bg-white/20 hover:text-white sm:w-auto"
+                asChild
+              >
+                <a href="#our-story">Explore Our Wedding</a>
+              </Button>
+              <JoinCelebrationCta className="h-12 w-full rounded-full px-6 sm:w-auto" />
+            </div>
+          </Reveal>
+        ) : null}
       </div>
     </section>
   );

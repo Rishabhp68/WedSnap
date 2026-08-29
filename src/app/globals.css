@@ -168,3 +168,130 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Leaflet (guest live map)
+
+   Leaflet ships its own opinionated chrome — sharp white boxes, blue links,
+   a system font stack — which reads as a generic utility map next to the
+   rest of the app. These overrides pull it onto the wedding palette.
+   --------------------------------------------------------------------------- */
+
+.leaflet-container {
+  background: var(--muted);
+  font-family: var(--font-sans);
+  /* Leaflet's own panes/controls go up to z-index 1000, which would paint
+     over the app's fixed bottom nav (z-40). Containing them in a stacking
+     context keeps the whole map below the nav. */
+  isolation: isolate;
+}
+
+/* Warms the basemap toward the ivory/gold palette so it doesn't read as a
+   cold grey utility map dropped into the page. */
+.leaflet-tile-pane {
+  filter: sepia(0.22) saturate(0.9) brightness(1.03);
+}
+
+.leaflet-container a {
+  color: var(--primary);
+}
+
+.leaflet-bar,
+.leaflet-control-attribution {
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px rgb(42 27 22 / 0.1);
+  overflow: hidden;
+}
+
+.leaflet-bar a,
+.leaflet-bar a:hover {
+  background: var(--card);
+  color: var(--foreground);
+  border-bottom-color: var(--border);
+}
+
+.leaflet-bar a:hover {
+  background: var(--muted);
+}
+
+.leaflet-control-attribution {
+  background: color-mix(in srgb, var(--card) 88%, transparent) !important;
+  color: var(--muted-foreground);
+  padding: 2px 8px;
+  font-size: 10px;
+}
+
+.leaflet-popup-content-wrapper {
+  background: var(--card);
+  color: var(--card-foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 28px rgb(42 27 22 / 0.16);
+}
+
+.leaflet-popup-content {
+  margin: 10px 14px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.leaflet-popup-tip {
+  background: var(--card);
+  border: 1px solid var(--border);
+}
+
+.leaflet-popup-close-button {
+  color: var(--muted-foreground) !important;
+}
+
+/* --- Guest pins ---------------------------------------------------------- */
+
+.guest-pin {
+  width: 44px;
+  height: 52px;
+}
+
+.guest-pin__body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border: 2.5px solid var(--card);
+  border-radius: 9999px;
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+  font-size: 15px;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgb(42 27 22 / 0.3);
+}
+
+.guest-pin__body img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* The tail anchors the floating avatar to an actual point on the map. */
+.guest-pin__tail {
+  width: 0;
+  height: 0;
+  margin: -2px auto 0;
+  border-top: 9px solid var(--card);
+  border-right: 6px solid transparent;
+  border-left: 6px solid transparent;
+  filter: drop-shadow(0 2px 2px rgb(42 27 22 / 0.22));
+}
+
+.guest-pin--self .guest-pin__body {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent),
+    0 4px 14px rgb(42 27 22 / 0.3);
+}
+
+.guest-pin--self .guest-pin__tail {
+  border-top-color: var(--accent);
+}

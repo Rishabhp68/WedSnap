@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useInView } from "react-intersection-observer";
 import Link from "next/link";
 import { Camera } from "lucide-react";
@@ -8,14 +8,17 @@ import { PostCard } from "./post-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { getPusherClient } from "@/lib/realtime/pusher-client";
+import { feedChannel, FEED_EVENTS } from "@/lib/realtime/channels";
 import type { FeedPost } from "@/lib/data/posts";
 
 interface FeedProps {
+  weddingId: string;
   initialPosts: FeedPost[];
   initialCursor: string | null;
 }
 
-export function Feed({ initialPosts, initialCursor }: FeedProps) {
+export function Feed({ weddingId, initialPosts, initialCursor }: FeedProps) {
   const [posts, setPosts] = useState(initialPosts);
   const [cursor, setCursor] = useState(initialCursor);
   const [loading, setLoading] = useState(false);
@@ -44,6 +47,26 @@ export function Feed({ initialPosts, initialCursor }: FeedProps) {
     },
   });
 
+  // New moments shared by any guest appear here live — no pull-to-refresh
+  // needed. Dedupes by id since a guest's own just-shared post already
+  // arrives via the server-rendered redirect back to this page.
+  useEffect(() => {
+    const pusher = getPusherClient();
+    const channel = pusher.subscribe(feedChannel(weddingId));
+
+    function handleNewPost(post: FeedPost) {
+      setPosts((prev) => {
+        if (prev.some((p) => p.id === post.id)) return prev;
+        return [post, ...prev];
+      });
+    }
+
+    channel.bind(FEED_EVENTS.NEW_POST, handleNewPost);
+    return () => {
+      channel.unbind(FEED_EVENTS.NEW_POST, handleNewPost);
+    };
+  }, [weddingId]);
+
   if (posts.length === 0) {
     return (
       <EmptyState
@@ -62,7 +85,7 @@ export function Feed({ initialPosts, initialCursor }: FeedProps) {
   return (
     <div className="space-y-4">
       {posts.map((post) => (
-        <PostCard key={post.id} post={post} />
+        <PostCard key={post.id} post={post} weddingId={weddingId} />
       ))}
 
       {cursor ? (

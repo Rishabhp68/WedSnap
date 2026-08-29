@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# locally generated dev certificates (next dev --experimental-https)
+/certificates
+
 # production
 /build
 

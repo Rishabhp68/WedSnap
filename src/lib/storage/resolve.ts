@@ -19,3 +19,21 @@ export function resolveMediaUrl(
     ...options,
   });
 }
+
+/**
+ * A still image for any media — the photo itself, or a frame extracted from a
+ * video. Lets thumbnails (admin moderation, posters) always render through an
+ * <img>, which can't display a video URL.
+ */
+export function resolveMediaPosterUrl(
+  media: Pick<PostMedia, "storageKey" | "url" | "mediaType">,
+  options?: { width?: number; height?: number },
+): string {
+  if (media.mediaType !== "VIDEO") return resolveMediaUrl(media, options);
+  if (media.storageKey.startsWith("seed/")) return media.url;
+  return getSignedMediaUrl(media.storageKey, {
+    resourceType: "video",
+    format: "jpg",
+    ...options,
+  });
+}

@@ -3,9 +3,10 @@ import { formatDistanceToNow } from "date-fns";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ReactionButton } from "./reaction-button";
 import { CommentSheet } from "./comment-sheet";
+import { FeedVideo } from "./feed-video";
 import type { FeedPost } from "@/lib/data/posts";
 
-export function PostCard({ post }: { post: FeedPost }) {
+export function PostCard({ post, weddingId }: { post: FeedPost; weddingId: string }) {
   const media = post.media[0];
 
   return (
@@ -24,25 +25,30 @@ export function PostCard({ post }: { post: FeedPost }) {
       </div>
 
       {media ? (
-        <div className="relative aspect-4/5 w-full bg-muted">
-          <Image
-            src={media.url}
-            alt={post.caption ?? ""}
-            fill
-            sizes="(min-width: 768px) 480px, 100vw"
-            className="object-cover"
-          />
-        </div>
+        media.mediaType === "VIDEO" ? (
+          <FeedVideo src={media.url} caption={post.caption ?? ""} />
+        ) : (
+          <div className="relative aspect-4/5 w-full bg-muted">
+            <Image
+              src={media.url}
+              alt={post.caption ?? ""}
+              fill
+              sizes="(min-width: 768px) 480px, 100vw"
+              className="object-cover"
+            />
+          </div>
+        )
       ) : null}
 
       <div className="space-y-2 p-4">
         <div className="flex items-center gap-4">
           <ReactionButton
             postId={post.id}
+            weddingId={weddingId}
             initialReacted={post.viewerHasReacted}
             initialCount={post._count.reactions}
           />
-          <CommentSheet postId={post.id} commentCount={post._count.comments} />
+          <CommentSheet postId={post.id} weddingId={weddingId} commentCount={post._count.comments} />
         </div>
         {post.caption ? (
           <p className="text-sm">

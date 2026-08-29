@@ -7,6 +7,8 @@ export interface SignedMediaUrlOptions {
   height?: number;
   crop?: "fill" | "fit" | "limit" | "thumb";
   resourceType?: StorageResourceType;
+  /** Overrides the delivered format — "jpg" against a video yields a still frame. */
+  format?: string;
 }
 
 // Only used if CLOUDINARY_MEDIA_AUTH_KEY is set (Cloudinary "token-based
@@ -29,13 +31,24 @@ const AUTH_TOKEN_DURATION_SECONDS = 60 * 10;
  * carries a short expiry, so a copied link stops working after ~10 minutes.
  */
 export function getSignedMediaUrl(publicId: string, options: SignedMediaUrlOptions = {}): string {
-  const { width, height, crop = "fill", resourceType = "image" } = options;
+  const { width, height, crop = "fill", resourceType = "image", format } = options;
+
+  // `gravity: auto` is content-aware cropping, which is an image-only feature
+  // on Cloudinary — sending it on a video transformation risks a delivery
+  // error, so video just gets scaled to width. An explicit image `format`
+  // against a video asset means "extract a still frame", and that output is
+  // an image again, so it takes the image treatment.
+  const deliversVideo = resourceType === "video" && !format;
+  const sizing = width || height ? { width, height, crop: deliversVideo ? "limit" : crop } : {};
 
   const transformation = [
     {
-      ...(width || height ? { width, height, crop, gravity: "auto" } : {}),
+      ...sizing,
+      ...(width || height ? (deliversVideo ? {} : { gravity: "auto" }) : {}),
       quality: "auto",
-      fetch_format: "auto",
+      // f_auto negotiates the format from the request, which would override an
+      // explicitly requested one.
+      ...(format ? {} : { fetch_format: "auto" }),
     },
   ];
 
@@ -47,6 +60,7 @@ export function getSignedMediaUrl(publicId: string, options: SignedMediaUrlOptio
     secure: true,
     sign_url: true,
     transformation,
+    ...(format ? { format } : {}),
     ...(authTokenKey
       ? { auth_token: { key: authTokenKey, duration: AUTH_TOKEN_DURATION_SECONDS } }
       : {}),

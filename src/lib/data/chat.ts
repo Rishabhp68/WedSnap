@@ -37,3 +37,68 @@ export async function getMessagesPage(chatRoomId: string, cursor?: string) {
 }
 
 export type ChatMessage = Awaited<ReturnType<typeof getMessagesPage>>["messages"][number];
+
+/** Confirms membership and returns display info (group vs. the other person, for DMs) for a room's header. */
+export async function getChatRoomForViewer(chatRoomId: string, viewerId: string) {
+  const room = await prisma.chatRoom.findFirst({
+    where: { id: chatRoomId, members: { some: { userId: viewerId } } },
+    include: {
+      members: {
+        where: { userId: { not: viewerId } },
+        include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+      },
+    },
+  });
+  if (!room) return null;
+
+  return {
+    id: room.id,
+    type: room.type,
+    title: room.type === "GROUP" ? (room.name ?? "Wedding Guests") : (room.members[0]?.user.name ?? "Guest"),
+    avatarUrl: room.type === "DIRECT" ? (room.members[0]?.user.avatarUrl ?? null) : null,
+  };
+}
+
+/** Every conversation (the group room + any DMs) a guest is part of, newest activity first, for the chat list screen. */
+export async function getConversations(weddingId: string, userId: string) {
+  const rooms = await prisma.chatRoom.findMany({
+    where: { weddingId, members: { some: { userId } } },
+    include: {
+      members: {
+        where: { userId: { not: userId } },
+        include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+      },
+      messages: {
+        where: { isDeleted: false },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        include: { user: { select: { name: true } } },
+      },
+    },
+  });
+
+  return rooms
+    .map((room) => ({
+      id: room.id,
+      type: room.type,
+      title: room.type === "GROUP" ? (room.name ?? "Wedding Guests") : (room.members[0]?.user.name ?? "Guest"),
+      avatarUrl: room.type === "DIRECT" ? (room.members[0]?.user.avatarUrl ?? null) : null,
+      // Lets the chat list hide guests from "start a new chat" search results
+      // when a DM thread with them already exists.
+      otherUserId: room.type === "DIRECT" ? (room.members[0]?.user.id ?? null) : null,
+      lastMessage: room.messages[0] ?? null,
+      activityAt: room.messages[0]?.createdAt ?? room.createdAt,
+    }))
+    .sort((a, b) => b.activityAt.getTime() - a.activityAt.getTime());
+}
+
+export type Conversation = Awaited<ReturnType<typeof getConversations>>[number];
+
+/** Every other guest of the wedding — backs the chat "new message" picker and search, and the live map's guest search. */
+export async function getOtherGuests(weddingId: string, excludeUserId: string) {
+  const guests = await prisma.weddingGuest.findMany({
+    where: { weddingId, userId: { not: excludeUserId } },
+    include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+  });
+  return guests.map((g) => g.user).sort((a, b) => a.name.localeCompare(b.name));
+}

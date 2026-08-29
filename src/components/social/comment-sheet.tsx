@@ -13,10 +13,20 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { addCommentAction, getPostCommentsAction } from "@/lib/actions/comments";
 import { EmptyState } from "@/components/shared/empty-state";
+import { getPusherClient } from "@/lib/realtime/pusher-client";
+import { feedChannel, FEED_EVENTS } from "@/lib/realtime/channels";
 
 type Comment = Awaited<ReturnType<typeof getPostCommentsAction>>[number];
 
-export function CommentSheet({ postId, commentCount }: { postId: string; commentCount: number }) {
+export function CommentSheet({
+  postId,
+  weddingId,
+  commentCount,
+}: {
+  postId: string;
+  weddingId: string;
+  commentCount: number;
+}) {
   const [open, setOpen] = useState(false);
   const [comments, setComments] = useState<Comment[] | null>(null);
   const [count, setCount] = useState(commentCount);
@@ -28,6 +38,29 @@ export function CommentSheet({ postId, commentCount }: { postId: string; comment
       getPostCommentsAction(postId).then(setComments);
     }
   }, [open, comments, postId]);
+
+  // Live updates from anyone commenting on this post — dedupes by id so the
+  // sender's own comment (already appended from the action's return value
+  // below) never doubles up when its own broadcast echoes back.
+  useEffect(() => {
+    const pusher = getPusherClient();
+    const channel = pusher.subscribe(feedChannel(weddingId));
+
+    function handleCommentAdded(payload: { postId: string; count: number; comment: Comment }) {
+      if (payload.postId !== postId) return;
+      setCount(payload.count);
+      setComments((prev) => {
+        if (prev === null) return prev;
+        if (prev.some((c) => c.id === payload.comment.id)) return prev;
+        return [...prev, payload.comment];
+      });
+    }
+
+    channel.bind(FEED_EVENTS.COMMENT_ADDED, handleCommentAdded);
+    return () => {
+      channel.unbind(FEED_EVENTS.COMMENT_ADDED, handleCommentAdded);
+    };
+  }, [weddingId, postId]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

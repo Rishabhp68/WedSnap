@@ -105,15 +105,18 @@ export function ChatRoom({ chatRoomId, currentUserId, initialMessages, initialCu
     setText("");
     setSending(true);
 
-    // MessageBubble never renders the sender's name/avatar for the
-    // viewer's own messages, so a placeholder user here is invisible —
-    // only the real id from the server matters, to reconcile with the
-    // Pusher echo of this same message.
-    const tempId = `temp-${Date.now()}`;
+    // The id is generated here (not by the DB) and sent to the server as
+    // the message's real primary key. That's what makes this safe: the
+    // optimistic bubble, the Pusher echo, and the action's return value all
+    // carry the *same* id, so whichever arrives first "wins" and the
+    // others are recognized as the same message instead of duplicating it.
+    // MessageBubble never renders the sender's own name/avatar, so the
+    // placeholder user fields below are never actually shown.
+    const clientId = crypto.randomUUID();
     setMessages((prev) => [
       ...prev,
       {
-        id: tempId,
+        id: clientId,
         chatRoomId,
         userId: currentUserId,
         content,
@@ -126,18 +129,19 @@ export function ChatRoom({ chatRoomId, currentUserId, initialMessages, initialCu
       scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
     });
 
-    const result = await sendMessageAction(chatRoomId, content);
+    const result = await sendMessageAction(chatRoomId, content, clientId);
     setSending(false);
-    if (result.ok) {
-      setMessages((prev) => prev.map((m) => (m.id === tempId ? result.message : m)));
-    } else {
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+    if (!result.ok) {
+      setMessages((prev) => prev.filter((m) => m.id !== clientId));
       toast.error(result.error ?? "Message couldn't be sent.");
     }
+    // On success we deliberately don't touch `messages` here — the Pusher
+    // echo (or the dedupe check within it) is what reconciles this id, so
+    // there's exactly one write path instead of two racing ones.
   }
 
   return (
-    <div className="flex h-[calc(100dvh-4rem-5rem)] flex-col md:h-[calc(100dvh-4rem)]">
+    <div className="flex h-full flex-col">
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {cursor ? <div ref={topSentinelRef} className="h-1" /> : null}
         {messages.length === 0 ? (

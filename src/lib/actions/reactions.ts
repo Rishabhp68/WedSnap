@@ -3,6 +3,8 @@
 import { requireGuest } from "@/lib/auth/current-guest";
 import { prisma } from "@/lib/db/client";
 import { toggleReactionSchema } from "@/lib/validation/reaction";
+import { pusherServer } from "@/lib/realtime/pusher-server";
+import { feedChannel, FEED_EVENTS } from "@/lib/realtime/channels";
 
 /**
  * Simple like/unlike toggle. The schema supports five reaction types for
@@ -29,13 +31,24 @@ export async function toggleReactionAction(postId: string) {
     where: { postId_userId: { postId: post.id, userId: user.id } },
   });
 
+  let reacted: boolean;
   if (existing) {
     await prisma.reaction.delete({ where: { id: existing.id } });
-    return { ok: true as const, reacted: false };
+    reacted = false;
+  } else {
+    await prisma.reaction.create({
+      data: { postId: post.id, userId: user.id, type: parsed.data.type },
+    });
+    reacted = true;
   }
 
-  await prisma.reaction.create({
-    data: { postId: post.id, userId: user.id, type: parsed.data.type },
+  // Only the shared count is broadcast — "did *I* react" is per-viewer and
+  // never something another guest's tap should change.
+  const count = await prisma.reaction.count({ where: { postId: post.id } });
+  await pusherServer.trigger(feedChannel(wedding.id), FEED_EVENTS.REACTION_UPDATED, {
+    postId: post.id,
+    count,
   });
-  return { ok: true as const, reacted: true };
+
+  return { ok: true as const, reacted };
 }

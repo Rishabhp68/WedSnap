@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import Image from "next/image";
-import { UserButton } from "@clerk/nextjs";
 import { NAV_ITEMS } from "./nav-config";
+import { NotificationBell } from "@/components/social/notification-bell";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 
 interface AppShellProps {
@@ -12,6 +12,9 @@ interface AppShellProps {
   weddingLabel: string;
   guestName: string;
   guestAvatarUrl: string | null;
+  weddingId: string;
+  currentUserId: string;
+  unreadCount: number;
 }
 
 function isActive(pathname: string, href: string) {
@@ -19,15 +22,52 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function AppShell({ children, weddingLabel, guestName, guestAvatarUrl }: AppShellProps) {
+export function AppShell({
+  children,
+  weddingLabel,
+  guestName,
+  guestAvatarUrl,
+  weddingId,
+  currentUserId,
+  unreadCount,
+}: AppShellProps) {
   const pathname = usePathname();
+  const profileActive = isActive(pathname, "/app/profile");
+
+  // Replaces Clerk's UserButton: the avatar is now the way into the profile
+  // screen, which is where signing out lives.
+  const profileLink = (
+    <Link href="/app/profile" aria-label="Your profile" aria-current={profileActive ? "page" : undefined}>
+      <Avatar
+        className={cn(
+          "size-8 ring-2 transition-colors",
+          profileActive ? "ring-primary" : "ring-transparent",
+        )}
+      >
+        <AvatarImage src={guestAvatarUrl ?? undefined} alt="" />
+        <AvatarFallback className="text-xs">{guestName.slice(0, 1)}</AvatarFallback>
+      </Avatar>
+    </Link>
+  );
+
+  // Remounts the bell whenever the server-rendered count changes, so live
+  // arrivals counted in its local state are dropped rather than added on top.
+  const bell = (
+    <NotificationBell
+      key={unreadCount}
+      weddingId={weddingId}
+      currentUserId={currentUserId}
+      initialUnreadCount={unreadCount}
+    />
+  );
 
   return (
     <div className="flex min-h-dvh flex-col md:flex-row">
       {/* Desktop sidebar */}
-      <aside className="hidden w-64 shrink-0 border-r border-border bg-card/40 md:flex md:flex-col">
-        <div className="flex items-center gap-2 px-6 py-6">
+      <aside className="hidden w-64 shrink-0 border-r border-border bg-card/40 md:sticky md:top-0 md:flex md:h-dvh md:flex-col">
+        <div className="flex items-center justify-between gap-2 px-6 py-6">
           <span className="font-display text-xl text-primary">{weddingLabel}</span>
+          {bell}
         </div>
         <nav className="flex flex-1 flex-col gap-1 px-3">
           {NAV_ITEMS.map((item) => {
@@ -49,28 +89,29 @@ export function AppShell({ children, weddingLabel, guestName, guestAvatarUrl }: 
             );
           })}
         </nav>
-        <div className="flex items-center gap-3 border-t border-border px-6 py-4">
-          <UserButton />
+        <Link
+          href="/app/profile"
+          className={cn(
+            "flex items-center gap-3 border-t border-border px-6 py-4 transition-colors hover:bg-muted",
+            profileActive && "bg-muted",
+          )}
+        >
+          <Avatar className="size-8">
+            <AvatarImage src={guestAvatarUrl ?? undefined} alt="" />
+            <AvatarFallback className="text-xs">{guestName.slice(0, 1)}</AvatarFallback>
+          </Avatar>
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">{guestName}</p>
           </div>
-        </div>
+        </Link>
       </aside>
 
       {/* Mobile top bar */}
       <header className="flex items-center justify-between border-b border-border bg-background/80 px-4 pt-safe backdrop-blur-md md:hidden">
         <span className="font-display py-3 text-lg text-primary">{weddingLabel}</span>
-        <div className="flex items-center gap-3">
-          {guestAvatarUrl ? (
-            <Image
-              src={guestAvatarUrl}
-              alt=""
-              width={32}
-              height={32}
-              className="rounded-full object-cover"
-            />
-          ) : null}
-          <UserButton />
+        <div className="flex items-center gap-2">
+          {bell}
+          {profileLink}
         </div>
       </header>
 

@@ -5,6 +5,9 @@ import { revalidatePath } from "next/cache";
 import { requireGuest } from "@/lib/auth/current-guest";
 import { prisma } from "@/lib/db/client";
 import { createPostSchema } from "@/lib/validation/post";
+import { resolveMediaUrl } from "@/lib/storage/resolve";
+import { pusherServer } from "@/lib/realtime/pusher-server";
+import { feedChannel, FEED_EVENTS } from "@/lib/realtime/channels";
 
 export interface CreatePostState {
   ok: boolean;
@@ -38,8 +41,8 @@ export async function createPostAction(
   // A shared moment shows up two places at once — the permanent feed and
   // the 24h "Wedding Moments" story rail — so both need to exist atomically;
   // a partial write would either drop the post or leave an orphaned story.
-  await prisma.$transaction(async (tx) => {
-    await tx.post.create({
+  const post = await prisma.$transaction(async (tx) => {
+    const created = await tx.post.create({
       data: {
         weddingId: wedding.id,
         userId: user.id,
@@ -47,6 +50,10 @@ export async function createPostAction(
         media: {
           create: parsed.data.media.map((m, order) => ({ ...m, order })),
         },
+      },
+      include: {
+        user: { select: { id: true, name: true, avatarUrl: true } },
+        media: { orderBy: { order: "asc" } },
       },
     });
 
@@ -63,6 +70,17 @@ export async function createPostAction(
         },
       });
     }
+
+    return created;
+  });
+
+  // Every other guest currently on the feed gets this pushed to them live —
+  // no one has to pull-to-refresh to see a moment as it's shared.
+  await pusherServer.trigger(feedChannel(wedding.id), FEED_EVENTS.NEW_POST, {
+    ...post,
+    media: post.media.map((m) => ({ ...m, url: resolveMediaUrl(m, { width: 1080 }) })),
+    _count: { comments: 0, reactions: 0 },
+    viewerHasReacted: false,
   });
 
   revalidatePath("/app");

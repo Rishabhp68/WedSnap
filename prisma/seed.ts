@@ -261,6 +261,18 @@ async function main() {
     },
   });
 
+  // Everything above is the real wedding: the couple, venue, schedule, story
+  // and the group chat every guest is enrolled into. Everything below is
+  // invented people and activity, which exists so local development looks
+  // alive — and which real guests must never see. Production seeds with
+  // SEED_DEMO_CONTENT=false and fills its guest list as people sign in.
+  if (process.env.SEED_DEMO_CONTENT === "false") {
+    console.log("Seed complete — wedding content only, demo guests/posts skipped:");
+    console.log(`  Wedding: ${wedding.partnerOneName} & ${wedding.partnerTwoName} (${wedding.slug})`);
+    console.log(`  Group chat: ${groupRoom.id}`);
+    return;
+  }
+
   const guests = [];
   for (let i = 0; i < GUEST_NAMES.length; i++) {
     const name = GUEST_NAMES[i];

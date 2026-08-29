@@ -1,7 +1,8 @@
 import Image from "next/image";
+import { Play } from "lucide-react";
 import { requireAdmin } from "@/lib/auth/current-guest";
 import { prisma } from "@/lib/db/client";
-import { resolveMediaUrl } from "@/lib/storage/resolve";
+import { resolveMediaPosterUrl, resolveMediaUrl } from "@/lib/storage/resolve";
 import { DeleteButton } from "@/components/admin/delete-button";
 import { formatDistanceToNow } from "date-fns";
 import { deleteCommentAction, deletePostAction } from "./actions";
@@ -40,14 +41,30 @@ export default async function AdminPostsPage() {
             return (
               <div key={post.id} className="flex gap-4 rounded-2xl border border-border bg-card p-4">
                 {media ? (
+                  // Always an <img>: a video URL through next/image can't
+                  // decode and renders as a broken-image placeholder, so
+                  // videos are thumbnailed from an extracted frame instead.
                   <div className="relative size-20 shrink-0 overflow-hidden rounded-xl bg-muted">
                     <Image
-                      src={resolveMediaUrl(media, { width: 160 })}
+                      src={resolveMediaPosterUrl(media, { width: 160 })}
                       alt=""
                       fill
                       sizes="80px"
                       className="object-cover"
                     />
+                    {media.mediaType === "VIDEO" ? (
+                      // One frame isn't enough to moderate a clip on, so the
+                      // thumbnail opens the full video.
+                      <a
+                        href={resolveMediaUrl(media, { width: 720 })}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label="Play video"
+                        className="absolute inset-0 flex items-center justify-center bg-black/35 transition-colors hover:bg-black/50"
+                      >
+                        <Play className="size-6 fill-white text-white" />
+                      </a>
+                    ) : null}
                   </div>
                 ) : null}
                 <div className="min-w-0 flex-1">

@@ -26,12 +26,22 @@ export default async function AdminGuestsPage() {
     },
   });
 
+  const admins = guests.filter((guest) => guest.role === "ADMIN");
+
   return (
     <div>
       <div className="flex items-center justify-between">
         <h2 className="font-display text-2xl">Guests</h2>
         <p className="text-sm text-muted-foreground">{guests.length} total</p>
       </div>
+
+      <p className="mt-2 text-sm text-muted-foreground">
+        Use the role dropdown on any guest to make them an admin.{" "}
+        <span className="text-foreground">
+          {admins.length} {admins.length === 1 ? "admin" : "admins"}
+          {admins.length > 0 ? `: ${admins.map((a) => a.user.name).join(", ")}` : ""}
+        </span>
+      </p>
 
       <div className="mt-6 space-y-2">
         {guests.map((guest) => {

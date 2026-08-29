@@ -21,6 +21,15 @@ export function validateImageFile(file: File): string | null {
   return null;
 }
 
+/** Photos or video — used by the post composer, which accepts both. Avatars stay image-only. */
+export function validateMediaFile(file: File): string | null {
+  if (file.type.startsWith("video/")) {
+    if (file.size > MAX_VIDEO_BYTES) return "That video is too large (max 100MB).";
+    return null;
+  }
+  return validateImageFile(file);
+}
+
 /**
  * Uploads directly from the browser to Cloudinary using a short-lived
  * signature from our server — the file's bytes never touch our Next.js

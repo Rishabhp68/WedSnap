@@ -19,7 +19,7 @@ export default async function GuestHomePage() {
       <StoryRail groups={storyGroups} currentUserId={user.id} />
 
       <div className="px-4">
-        <Feed initialPosts={feedPage.posts} initialCursor={feedPage.nextCursor} />
+        <Feed weddingId={wedding.id} initialPosts={feedPage.posts} initialCursor={feedPage.nextCursor} />
       </div>
     </div>
   );

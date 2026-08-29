@@ -1,9 +1,13 @@
-import { CalendarDays, Camera } from "lucide-react";
+import Link from "next/link";
+import { CalendarDays, Camera, LogOut, ShieldCheck } from "lucide-react";
+import { SignOutButton } from "@clerk/nextjs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { requireGuest } from "@/lib/auth/current-guest";
 import { getGuestProfileStats } from "@/lib/data/profile";
 import { EditProfileDialog } from "@/components/social/edit-profile-dialog";
+import { LocationSharingToggle } from "@/components/social/location-sharing-toggle";
 import { formatEventDate } from "@/lib/utils/dates";
 
 const RSVP_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
@@ -49,6 +53,43 @@ export default async function ProfilePage() {
           <span className="text-sm font-medium">{formatEventDate(guest.joinedAt, wedding.timezone)}</span>
           <span className="text-xs text-muted-foreground">Joined</span>
         </div>
+      </div>
+
+      <div className="mt-6">
+        <LocationSharingToggle initialEnabled={guest.locationSharingEnabled} />
+      </div>
+
+      {/* The only route into /admin from the app — the admin area links back
+          here, but nothing linked in, so the section was unreachable without
+          typing the URL. */}
+      {guest.role === "ADMIN" ? (
+        <Link
+          href="/admin"
+          className="mt-4 flex items-center gap-3 rounded-2xl border border-border bg-card p-4 transition-colors hover:bg-muted"
+        >
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <ShieldCheck className="size-4" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-medium">Admin dashboard</span>
+            <span className="block text-xs text-muted-foreground">
+              Manage events, guests, RSVPs and moderation.
+            </span>
+          </span>
+        </Link>
+      ) : null}
+
+      {/* Signing out used to live in Clerk's UserButton menu in the top bar;
+          that avatar now opens this page, so the action moves here. */}
+      <div className="mt-6">
+        <SignOutButton redirectUrl="/">
+          <Button
+            variant="outline"
+            className="h-12 w-full rounded-2xl text-destructive hover:text-destructive"
+          >
+            <LogOut className="size-4" /> Sign out
+          </Button>
+        </SignOutButton>
       </div>
     </div>
   );

@@ -1,22 +1,41 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Heart } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import { toggleReactionAction } from "@/lib/actions/reactions";
+import { getPusherClient } from "@/lib/realtime/pusher-client";
+import { feedChannel, FEED_EVENTS } from "@/lib/realtime/channels";
 import { cn } from "@/lib/utils";
 
 interface ReactionButtonProps {
   postId: string;
+  weddingId: string;
   initialReacted: boolean;
   initialCount: number;
 }
 
-export function ReactionButton({ postId, initialReacted, initialCount }: ReactionButtonProps) {
+export function ReactionButton({ postId, weddingId, initialReacted, initialCount }: ReactionButtonProps) {
   const [reacted, setReacted] = useState(initialReacted);
   const [count, setCount] = useState(initialCount);
   const [, startTransition] = useTransition();
   const shouldReduceMotion = useReducedMotion();
+
+  // Someone else reacting to this post updates the shared count live — only
+  // the count is ever pushed; "did *I* react" stays local to this viewer.
+  useEffect(() => {
+    const pusher = getPusherClient();
+    const channel = pusher.subscribe(feedChannel(weddingId));
+
+    function handleReactionUpdated(payload: { postId: string; count: number }) {
+      if (payload.postId === postId) setCount(payload.count);
+    }
+
+    channel.bind(FEED_EVENTS.REACTION_UPDATED, handleReactionUpdated);
+    return () => {
+      channel.unbind(FEED_EVENTS.REACTION_UPDATED, handleReactionUpdated);
+    };
+  }, [weddingId, postId]);
 
   function handleClick() {
     // Optimistic — a wedding's worth of guests tapping hearts should never

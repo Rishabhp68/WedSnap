@@ -54,12 +54,26 @@ model WeddingGuest {
   invitedBy String?
   joinedAt  DateTime  @default(now())
 
+  /// Live-map opt-in, scoped per wedding (a guest may attend more than one
+  /// wedding and only want to be visible on this one's map). Off by default.
+  locationSharingEnabled Boolean   @default(false)
+  latitude               Float?
+  longitude              Float?
+  locationUpdatedAt      DateTime?
+
+  /// Watermark for the activity screen: anything posted after this is "new"
+  /// to this guest. A new-post notification goes to *every* guest, so storing
+  /// one row per guest per post would mean ~500 writes per photo; a single
+  /// timestamp answers the same question with none.
+  notificationsSeenAt DateTime?
+
   wedding Wedding @relation(fields: [weddingId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([weddingId, userId])
   @@index([weddingId])
   @@index([userId])
+  @@index([weddingId, locationSharingEnabled])
 }
 
 // ---------------------------------------------------------------------------

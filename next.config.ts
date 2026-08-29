@@ -4,7 +4,7 @@ const nextConfig: NextConfig = {
   // Lets the dev server serve CSS/JS/HMR to a phone testing over the LAN IP
   // or through an ngrok tunnel (Next.js blocks cross-origin dev requests by
   // default). Update these if your local IP or ngrok URL changes.
-  allowedDevOrigins: ["192.168.1.33", "divinity-blubber-crushing.ngrok-free.dev"],
+  allowedDevOrigins: ["192.168.1.25", "divinity-blubber-crushing.ngrok-free.dev"],
   images: {
     remotePatterns: [
       // Guest-uploaded photos.
