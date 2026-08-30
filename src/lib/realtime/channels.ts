@@ -34,3 +34,19 @@ export const LOCATION_EVENTS = {
   LOCATION_UPDATED: "location-updated",
   SHARING_STOPPED: "sharing-stopped",
 } as const;
+
+/**
+ * One private channel per guest, for things addressed to them personally.
+ *
+ * The chat room channel only reaches people with that conversation open, so a
+ * message arriving while the recipient is on the feed produced no signal at
+ * all — and a Web Push notification is suppressed while the app is focused.
+ * This is the channel that covers that gap.
+ */
+export function userChannel(userId: string): string {
+  return `private-user-${userId}`;
+}
+
+export const USER_EVENTS = {
+  DIRECT_ALERT: "direct-alert",
+} as const;

@@ -26,6 +26,11 @@ export async function generateMetadata(): Promise<Metadata> {
     description:
       wedding.tagline ??
       `Join us in celebrating the wedding of ${names} — details, schedule, and a private space to share the moments together.`,
+    // The manifest and both icons are generated (app/manifest.ts, app/icon.tsx,
+    // app/apple-icon.tsx) and Next links them automatically, so only the iOS
+    // web-app flags are declared here. Without `capable`, iOS opens the Home
+    // Screen shortcut in a Safari tab — where push notifications don't work.
+    appleWebApp: { capable: true, statusBarStyle: "default", title: names },
   };
 }
 

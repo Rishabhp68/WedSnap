@@ -4,7 +4,8 @@ import { requireGuest } from "@/lib/auth/current-guest";
 import { prisma } from "@/lib/db/client";
 import { sendMessageSchema } from "@/lib/validation/message";
 import { pusherServer } from "@/lib/realtime/pusher-server";
-import { chatRoomChannel, CHAT_EVENTS } from "@/lib/realtime/channels";
+import { chatRoomChannel, CHAT_EVENTS, userChannel, USER_EVENTS } from "@/lib/realtime/channels";
+import { sendPushToUsers } from "@/lib/push/server";
 
 export async function sendMessageAction(chatRoomId: string, content: string, clientId: string) {
   const { user } = await requireGuest();
@@ -16,6 +17,9 @@ export async function sendMessageAction(chatRoomId: string, content: string, cli
 
   const membership = await prisma.chatMember.findUnique({
     where: { chatRoomId_userId: { chatRoomId: parsed.data.chatRoomId, userId: user.id } },
+    // The room comes along for the notification title: a sender's name alone
+    // is ambiguous in a group, where "who" and "where" are different answers.
+    include: { chatRoom: { select: { type: true, name: true } } },
   });
   if (!membership) {
     return { ok: false as const, error: "You're not part of this chat." };
@@ -40,6 +44,48 @@ export async function sendMessageAction(chatRoomId: string, content: string, cli
   // Pusher's pub/sub keeps each client's connection idle until a message
   // actually arrives.
   await pusherServer.trigger(chatRoomChannel(parsed.data.chatRoomId), CHAT_EVENTS.NEW_MESSAGE, message);
+
+  // Only this room's members — a DM must never ring the whole guest list.
+  try {
+    const recipients = await prisma.chatMember.findMany({
+      where: { chatRoomId: parsed.data.chatRoomId, userId: { not: user.id } },
+      select: { userId: true },
+    });
+
+    // Personal channel as well as the room channel: a recipient who has the
+    // app open on some other screen isn't subscribed to this room, and their
+    // Web Push notification is suppressed while the app is focused.
+    await Promise.all(
+      recipients.map((member) =>
+        pusherServer.trigger(userChannel(member.userId), USER_EVENTS.DIRECT_ALERT, {
+          roomId: parsed.data.chatRoomId,
+          fromName: user.name,
+        }),
+      ),
+    );
+
+    // Mirrors how the chat list titles a room, so the notification and the
+    // screen it opens agree on what the conversation is called.
+    const room = membership.chatRoom;
+    const title =
+      room.type === "GROUP"
+        ? `${user.name} · ${room.name ?? "Wedding Guests"}`
+        : user.name;
+
+    await sendPushToUsers(
+      recipients.map((member) => member.userId),
+      {
+        title,
+        body: parsed.data.content.slice(0, 140),
+        url: `/app/chat/${parsed.data.chatRoomId}`,
+        // Per-room tag so a busy group chat collapses into one notification
+        // while a separate DM still arrives as its own.
+        tag: `chat-${parsed.data.chatRoomId}`,
+      },
+    );
+  } catch {
+    // The message is already saved and broadcast; delivery is best-effort.
+  }
 
   return { ok: true as const, message };
 }

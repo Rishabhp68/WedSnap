@@ -8,6 +8,7 @@ import { requireGuest } from "@/lib/auth/current-guest";
 import { getGuestProfileStats } from "@/lib/data/profile";
 import { EditProfileDialog } from "@/components/social/edit-profile-dialog";
 import { LocationSharingToggle } from "@/components/social/location-sharing-toggle";
+import { NotificationToggle } from "@/components/social/notification-toggle";
 import { formatEventDate } from "@/lib/utils/dates";
 
 const RSVP_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
@@ -55,7 +56,8 @@ export default async function ProfilePage() {
         </div>
       </div>
 
-      <div className="mt-6">
+      <div className="mt-6 space-y-3">
+        <NotificationToggle publicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY} />
         <LocationSharingToggle initialEnabled={guest.locationSharingEnabled} />
       </div>
 

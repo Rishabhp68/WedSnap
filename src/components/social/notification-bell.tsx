@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Bell } from "lucide-react";
 import { getPusherClient } from "@/lib/realtime/pusher-client";
-import { feedChannel, FEED_EVENTS } from "@/lib/realtime/channels";
+import { feedChannel, FEED_EVENTS, userChannel, USER_EVENTS } from "@/lib/realtime/channels";
+import { alertInApp } from "@/lib/push/alert";
 import { cn } from "@/lib/utils";
 
 interface NotificationBellProps {
@@ -31,6 +33,14 @@ export function NotificationBell({
 }: NotificationBellProps) {
   const [count, setCount] = useState(initialUnreadCount);
 
+  // Held in a ref so navigating between rooms doesn't resubscribe the whole
+  // channel — the handler only needs the *current* path when an event lands.
+  const pathname = usePathname();
+  const pathnameRef = useRef(pathname);
+  useEffect(() => {
+    pathnameRef.current = pathname;
+  }, [pathname]);
+
   useEffect(() => {
     const client = getPusherClient();
     const channel = client.subscribe(feedChannel(weddingId));
@@ -39,13 +49,31 @@ export function NotificationBell({
       // Your own post is not news to you.
       if (post?.userId === currentUserId) return;
       setCount((prev) => prev + 1);
+      // The Web Push notification is suppressed while the app is focused, so
+      // a badge alone was the entire signal — easy to miss. Chime and buzz.
+      alertInApp();
     }
 
     channel.bind(FEED_EVENTS.NEW_POST, handleNewPost);
-    // Unbinds this handler only — the Feed shares this channel, and
+
+    // The guest's own channel: chat messages arriving while they're anywhere
+    // in the app but not inside that conversation. Nothing else subscribes
+    // here, so this one is safe to fully unsubscribe on cleanup.
+    const personal = client.subscribe(userChannel(currentUserId));
+    function handleDirectAlert(data: { roomId?: string }) {
+      // Chiming at a message that just appeared on screen is noise — the room
+      // you're reading is the one case where the arrival is already obvious.
+      if (data?.roomId && pathnameRef.current === `/app/chat/${data.roomId}`) return;
+      alertInApp();
+    }
+    personal.bind(USER_EVENTS.DIRECT_ALERT, handleDirectAlert);
+
+    // Unbinds this handler only — the Feed shares the feed channel, and
     // `unsubscribe` would tear it down for that component too.
     return () => {
       channel.unbind(FEED_EVENTS.NEW_POST, handleNewPost);
+      personal.unbind(USER_EVENTS.DIRECT_ALERT, handleDirectAlert);
+      client.unsubscribe(userChannel(currentUserId));
     };
   }, [weddingId, currentUserId]);
 

@@ -8,6 +8,7 @@ import { createPostSchema } from "@/lib/validation/post";
 import { resolveMediaUrl } from "@/lib/storage/resolve";
 import { pusherServer } from "@/lib/realtime/pusher-server";
 import { feedChannel, FEED_EVENTS } from "@/lib/realtime/channels";
+import { sendPushToWedding } from "@/lib/push/server";
 
 export interface CreatePostState {
   ok: boolean;
@@ -82,6 +83,20 @@ export async function createPostAction(
     _count: { comments: 0, reactions: 0 },
     viewerHasReacted: false,
   });
+
+  // Rings every other guest's phone. Deliberately after the Pusher trigger and
+  // wrapped: a push service being slow or down must not fail the post, which
+  // is already committed by this point.
+  try {
+    await sendPushToWedding(wedding.id, user.id, {
+      title: `${user.name} shared a moment`,
+      body: parsed.data.caption?.slice(0, 120) || "Tap to see the latest from the wedding.",
+      url: "/app",
+      tag: "new-post",
+    });
+  } catch {
+    // Notification delivery is best-effort; the post itself succeeded.
+  }
 
   revalidatePath("/app");
   redirect("/app");

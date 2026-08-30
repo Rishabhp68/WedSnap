@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import "leaflet/dist/leaflet.css";
-import L from "leaflet";
-import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
+import "maplibre-gl/dist/maplibre-gl.css";
+// Named imports, not a default: maplibre-gl publishes no default export.
+import { LngLatBounds, MapLibreMap, Marker, Popup, setWorkerUrl } from "maplibre-gl";
 import Link from "next/link";
 import { Crosshair, MapPin, Users } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -35,29 +35,99 @@ interface LiveMapProps {
 // still moves on every callback — only the network write is rate-limited.
 const MIN_SYNC_INTERVAL_MS = 10_000;
 
-function escapeHtml(value: string) {
-  return value.replace(
-    /[&<>"']/g,
-    (char) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] as string,
-  );
+/**
+ * Vector tiles, not raster. Raster basemaps ship one bitmap per tile at 1×, so
+ * on a phone at 2–3× device pixel ratio every tile pixel is stretched across
+ * several screen pixels — which is why the old OSM basemap looked pixelated on
+ * mobile. Vector tiles carry geometry and are drawn on the GPU at the device's
+ * true resolution, so roads and labels stay sharp at any zoom.
+ *
+ * OpenFreeMap serves the OpenMapTiles schema with no API key and no signup,
+ * which is what makes it usable here — CARTO's key-less endpoint now watermarks
+ * every tile, and the other hosted styles all require an account.
+ */
+const BASEMAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
+
+/**
+ * MapLibre 6 loads its worker from a URL it builds at runtime relative to its
+ * own module. Bundled into a Next chunk that resolves to a file that was never
+ * emitted, so the request 404s — and since all tile parsing happens in the
+ * worker, the map paints its background colour and nothing else. Pointing it
+ * at our own copy (kept in sync by scripts/copy-maplibre-worker.mjs) avoids
+ * the resolution entirely.
+ *
+ * Note the extension: `.mjs` had to be added to the middleware matcher in
+ * proxy.ts, or this request is redirected to sign-in and the map stays blank.
+ */
+setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
+
+/**
+ * Positron is a neutral grey basemap. Rather than wash the whole canvas with a
+ * CSS filter — which would tint the labels and shadows too — recolour the few
+ * fill layers that carry the map's character onto the wedding palette. Each is
+ * guarded, so an upstream change to the style can drop a layer without
+ * throwing and taking the map down with it.
+ */
+const PALETTE: Record<string, string> = {
+  background: "#fbf6ec",
+  landuse_residential: "#f6efe3",
+  park: "#e9eee0",
+  landcover_wood: "#e2e9d9",
+  building: "#f0e6d6",
+  water: "#cdd9e0",
+  road_area_pier: "#fbf6ec",
+};
+
+function applyPalette(map: MapLibreMap) {
+  for (const [id, color] of Object.entries(PALETTE)) {
+    const layer = map.getLayer(id);
+    if (!layer) continue;
+    const property = layer.type === "background" ? "background-color" : "fill-color";
+    try {
+      map.setPaintProperty(id, property, color);
+    } catch {
+      // A layer that exists but isn't a fill simply keeps its own colour.
+    }
+  }
 }
 
-function guestPinIcon(location: SharedLocation, isSelf: boolean) {
-  const inner = location.avatarUrl
-    ? `<img src="${escapeHtml(location.avatarUrl)}" alt="" />`
-    : escapeHtml(location.name.slice(0, 1).toUpperCase());
+function createPinElement() {
+  const root = document.createElement("div");
+  const body = document.createElement("div");
+  body.className = "guest-pin__body";
+  const tail = document.createElement("div");
+  tail.className = "guest-pin__tail";
+  root.append(body, tail);
+  return root;
+}
 
-  return L.divIcon({
-    className: "",
-    html: `<div class="guest-pin${isSelf ? " guest-pin--self" : ""}">
-             <div class="guest-pin__body">${inner}</div>
-             <div class="guest-pin__tail"></div>
-           </div>`,
-    iconSize: [44, 52],
-    iconAnchor: [22, 52],
-    popupAnchor: [0, -50],
-  });
+/**
+ * Builds the pin content as real nodes rather than an HTML string — Leaflet's
+ * divIcon only accepted markup, which meant hand-escaping guest names. Here a
+ * name is set as text and can't be markup in the first place.
+ */
+function renderPin(root: HTMLElement, location: SharedLocation, isSelf: boolean) {
+  root.className = `guest-pin${isSelf ? " guest-pin--self" : ""}`;
+  const body = root.firstElementChild as HTMLElement;
+  const avatar = location.avatarUrl ?? "";
+
+  // Keyed on the URL so a moving pin re-positions without swapping the <img>
+  // out from under the browser, which would make the avatar flicker on every
+  // geolocation callback.
+  if (root.dataset.avatar === avatar) {
+    if (!avatar) body.textContent = location.name.slice(0, 1).toUpperCase();
+    return;
+  }
+  root.dataset.avatar = avatar;
+
+  if (avatar) {
+    const img = document.createElement("img");
+    img.src = avatar;
+    img.alt = "";
+    body.replaceChildren(img);
+  } else {
+    body.textContent = location.name.slice(0, 1).toUpperCase();
+  }
 }
 
 export function LiveMap({
@@ -70,13 +140,33 @@ export function LiveMap({
   sharingEnabled,
   center,
 }: LiveMapProps) {
-  const [map, setMap] = useState<L.Map | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
+  const markersRef = useRef(new Map<string, Marker>());
+  // Captured once: later prop changes must not tear the map down and rebuild it.
+  const initialCenter = useRef(center);
+  const lastSyncedAt = useRef(0);
+
+  const [mapReady, setMapReady] = useState(false);
   const [query, setQuery] = useState("");
   const [locations, setLocations] = useState<Record<string, SharedLocation>>(() =>
     Object.fromEntries(initialLocations.map((location) => [location.userId, location])),
   );
   const [geoError, setGeoError] = useState<string | null>(null);
-  const lastSyncedAt = useRef(0);
+
+  // MapLibre draws through WebGL 2 and throws on construction without it.
+  // Checking before the map is ever built means the unsupported case renders
+  // a message on the first paint, rather than mounting and then erroring.
+  const [mapError] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const probe = document.createElement("canvas").getContext("webgl2");
+      if (probe) return null;
+    } catch {
+      // Some privacy modes throw rather than returning null.
+    }
+    return "This browser can't display the map.";
+  });
 
   // Evaluated once in the browser (this component never server-renders), so
   // the "why is my location not working" case is answered up front rather
@@ -90,17 +180,48 @@ export function LiveMap({
     return null;
   });
 
-  // Leaflet measures its container on mount. Inside this flex layout the
-  // final height often lands a frame later, which leaves the map showing
-  // grey/half-loaded tiles until it's told to re-measure.
   useEffect(() => {
-    if (!map) return;
-    const container = map.getContainer();
-    const observer = new ResizeObserver(() => map.invalidateSize());
+    if (!containerRef.current || mapError) return;
+
+    const markers = markersRef.current;
+    const map = new MapLibreMap({
+      container: containerRef.current,
+      style: BASEMAP_STYLE,
+      center: [initialCenter.current.lng, initialCenter.current.lat],
+      zoom: 15,
+      // A tilted or rotated map is disorienting for finding people, and on a
+      // phone both are easy to trigger by accident while pinching to zoom.
+      dragRotate: false,
+      touchPitch: false,
+      attributionControl: { compact: true },
+    });
+
+    map.touchZoomRotate.disableRotation();
+    mapRef.current = map;
+
+    map.on("load", () => {
+      applyPalette(map);
+      setMapReady(true);
+    });
+
+    return () => {
+      setMapReady(false);
+      markers.clear();
+      mapRef.current = null;
+      map.remove();
+    };
+  }, [mapError]);
+
+  // The map measures its container on creation. Inside this flex layout the
+  // final height often lands a frame later, which leaves the canvas sized to
+  // the wrong box until it's told to re-measure.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const observer = new ResizeObserver(() => mapRef.current?.resize());
     observer.observe(container);
-    map.invalidateSize();
     return () => observer.disconnect();
-  }, [map]);
+  }, []);
 
   useEffect(() => {
     const client = getPusherClient();
@@ -172,19 +293,62 @@ export function LiveMap({
   const pins = useMemo(() => Object.values(locations), [locations]);
   const self = locations[currentUserId];
 
+  // Markers are imperative objects rather than React children, so this
+  // reconciles them by hand: move the ones that already exist, add the new,
+  // and drop anyone who stopped sharing.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    const markers = markersRef.current;
+    const present = new Set<string>();
+
+    for (const location of pins) {
+      present.add(location.userId);
+      const isSelf = location.userId === currentUserId;
+      const label = isSelf ? "You" : location.name;
+      const existing = markers.get(location.userId);
+
+      if (existing) {
+        existing.setLngLat([location.longitude, location.latitude]);
+        renderPin(existing.getElement(), location, isSelf);
+        existing.getPopup()?.setText(label);
+        continue;
+      }
+
+      const element = createPinElement();
+      renderPin(element, location, isSelf);
+      markers.set(
+        location.userId,
+        new Marker({ element, anchor: "bottom" })
+          .setLngLat([location.longitude, location.latitude])
+          .setPopup(new Popup({ offset: 14, closeButton: false }).setText(label))
+          .addTo(map),
+      );
+    }
+
+    for (const [userId, marker] of markers) {
+      if (present.has(userId)) continue;
+      marker.remove();
+      markers.delete(userId);
+    }
+  }, [pins, mapReady, currentUserId]);
+
   const recenter = useCallback(() => {
+    const map = mapRef.current;
     if (!map) return;
     if (self) {
-      map.flyTo([self.latitude, self.longitude], 16, { duration: 0.6 });
+      map.flyTo({ center: [self.longitude, self.latitude], zoom: 16, duration: 600 });
       return;
     }
     if (pins.length > 0) {
-      map.fitBounds(L.latLngBounds(pins.map((p) => [p.latitude, p.longitude] as [number, number])), {
-        padding: [64, 64],
-        maxZoom: 16,
-      });
+      const bounds = pins.reduce(
+        (acc, pin) => acc.extend([pin.longitude, pin.latitude]),
+        new LngLatBounds(),
+      );
+      map.fitBounds(bounds, { padding: 64, maxZoom: 16, duration: 600 });
     }
-  }, [map, self, pins]);
+  }, [self, pins]);
 
   // Searches the whole guest roster, not just who's currently on the map, so
   // "where is X" gets an answer either way — either a pin to fly to, or an
@@ -202,52 +366,33 @@ export function LiveMap({
       .sort((a, b) => Number(Boolean(b.location)) - Number(Boolean(a.location)));
   }, [query, guests, locations, currentUserId, currentUserName, currentUserAvatarUrl]);
 
-  const flyToGuest = useCallback(
-    (location: SharedLocation) => {
-      if (!map) return;
-      map.flyTo([location.latitude, location.longitude], 17, { duration: 0.7 });
-      setQuery("");
-    },
-    [map],
-  );
+  const flyToGuest = useCallback((location: SharedLocation) => {
+    mapRef.current?.flyTo({
+      center: [location.longitude, location.latitude],
+      zoom: 17,
+      duration: 700,
+    });
+    setQuery("");
+  }, []);
 
   const notice = unsupportedReason ?? geoError;
   const searching = query.trim().length > 0;
 
   return (
-    // `isolate` contains both Leaflet's panes and the overlay chrome below in
-    // one stacking context, so none of it can paint over the app's fixed
-    // bottom nav (z-40) the way Leaflet's own z-index-1000 controls would.
+    // `isolate` contains both the map's canvas/controls and the overlay chrome
+    // below in one stacking context, so none of it can paint over the app's
+    // fixed bottom nav (z-40).
     <div className="relative isolate size-full">
-      <MapContainer
-        ref={setMap}
-        center={[center.lat, center.lng]}
-        zoom={15}
-        zoomControl={false}
-        scrollWheelZoom
-        className="size-full"
-      >
-        {/* CARTO Positron — a minimal, low-chroma basemap. Raw OSM tiles are
-            heavily coloured and fight the app's ivory/wine/gold palette. */}
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-          subdomains="abcd"
-          maxZoom={20}
-        />
-        {pins.map((location) => (
-          <Marker
-            key={location.userId}
-            position={[location.latitude, location.longitude]}
-            icon={guestPinIcon(location, location.userId === currentUserId)}
-          >
-            <Popup>{location.userId === currentUserId ? "You" : location.name}</Popup>
-          </Marker>
-        ))}
-      </MapContainer>
+      <div ref={containerRef} className="size-full" />
 
-      {/* Anchored to the top so it never covers Leaflet's attribution, which
-          the OSM/CARTO tile terms require to stay visible. */}
+      {mapError ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-muted px-8 text-center">
+          <p className="text-sm text-muted-foreground">{mapError}</p>
+        </div>
+      ) : null}
+
+      {/* Anchored to the top so it never covers the attribution control, which
+          the OpenStreetMap/OpenMapTiles terms require to stay visible. */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col gap-2 p-3">
         <div className="flex items-center gap-2">
           <SearchField

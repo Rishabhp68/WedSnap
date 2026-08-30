@@ -6,6 +6,7 @@ import { pusherServer } from "@/lib/realtime/pusher-server";
 const CHAT_CHANNEL_PATTERN = /^private-chat-(.+)$/;
 const FEED_CHANNEL_PATTERN = /^private-feed-(.+)$/;
 const LOCATION_CHANNEL_PATTERN = /^private-locations-(.+)$/;
+const USER_CHANNEL_PATTERN = /^private-user-(.+)$/;
 
 /**
  * Pusher calls this before letting a browser subscribe to a private
@@ -52,6 +53,16 @@ export async function POST(req: NextRequest) {
     const weddingId = locationMatch[1];
     if (weddingId !== guest.wedding.id) {
       return NextResponse.json({ error: "Not a guest of this wedding" }, { status: 403 });
+    }
+    return NextResponse.json(pusherServer.authorizeChannel(socketId, channelName));
+  }
+
+  const userMatch = channelName.match(USER_CHANNEL_PATTERN);
+  if (userMatch) {
+    // Strict equality, not a membership lookup: this channel carries message
+    // previews, so subscribing to anyone else's would leak their DMs.
+    if (userMatch[1] !== guest.user.id) {
+      return NextResponse.json({ error: "Not your channel" }, { status: 403 });
     }
     return NextResponse.json(pusherServer.authorizeChannel(socketId, channelName));
   }

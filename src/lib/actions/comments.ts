@@ -48,5 +48,7 @@ export async function addCommentAction(postId: string, content: string) {
     comment,
   });
 
-  return { ok: true as const, comment };
+  // `count` goes back to the sender too: incrementing locally double-counts
+  // when the broadcast has already been applied.
+  return { ok: true as const, comment, count };
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { RefreshCw, X } from "lucide-react";
+import { RefreshCw, X, Zap, ZapOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -14,7 +14,27 @@ interface LiveCameraProps {
 
 type FacingMode = "user" | "environment";
 
+/**
+ * `zoom` and `torch` are camera extensions to the media-track API. They're
+ * real on Android Chrome and absent on iOS Safari, and the DOM lib only
+ * declares them on MediaTrackSettings — not on capabilities or constraints.
+ */
+interface CameraCapabilities extends MediaTrackCapabilities {
+  zoom?: { min: number; max: number; step?: number };
+  torch?: boolean;
+}
+
+declare global {
+  // Augmenting rather than casting: a cast to a type with no overlapping
+  // members is rejected outright, and this keeps applyConstraints type-checked.
+  interface MediaTrackConstraintSet {
+    zoom?: ConstrainDouble;
+    torch?: ConstrainBoolean;
+  }
+}
+
 export const MAX_VIDEO_SECONDS = 15;
+const MAX_DIGITAL_ZOOM = 5;
 /** How long the shutter must be held before it becomes a recording rather than a photo. */
 const HOLD_TO_RECORD_MS = 260;
 
@@ -40,6 +60,12 @@ export function LiveCamera({ onCapture, onClose, onFallback }: LiveCameraProps) 
   const chunksRef = useRef<Blob[]>([]);
   const holdTimerRef = useRef<number | null>(null);
   const didRecordRef = useRef(false);
+  const pinchRef = useRef<{ startDistance: number; startZoom: number } | null>(null);
+  const pointersRef = useRef(new Map<number, { x: number; y: number }>());
+  const [zoom, setZoom] = useState(1);
+  const [nativeZoom, setNativeZoom] = useState<{ min: number; max: number } | null>(null);
+  const [torchAvailable, setTorchAvailable] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
   const [facingMode, setFacingMode] = useState<FacingMode>("environment");
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -81,6 +107,14 @@ export function LiveCamera({ onCapture, onClose, onFallback }: LiveCameraProps) 
         }
         streamRef.current = stream;
         if (videoRef.current) videoRef.current.srcObject = stream;
+
+        const track = stream.getVideoTracks()[0];
+        const caps = (track?.getCapabilities?.() ?? {}) as CameraCapabilities;
+        setNativeZoom(caps.zoom ? { min: caps.zoom.min, max: caps.zoom.max } : null);
+        setTorchAvailable(Boolean(caps.torch));
+        setZoom(1);
+        setTorchOn(false);
+
         setReady(true);
       } catch (err) {
         const name = err instanceof DOMException ? err.name : "";
@@ -103,6 +137,65 @@ export function LiveCamera({ onCapture, onClose, onFallback }: LiveCameraProps) 
       stream?.getTracks().forEach((track) => track.stop());
     };
   }, [facingMode]);
+
+  /**
+   * Applies zoom through the camera driver where the device supports it, and
+   * otherwise falls back to scaling the picture. The native path is real
+   * optical/sensor zoom at full quality; the fallback is a centre crop, which
+   * is the only option on iOS, where the zoom constraint doesn't exist.
+   */
+  const applyZoom = useCallback(
+    (next: number) => {
+      const max = nativeZoom?.max ?? MAX_DIGITAL_ZOOM;
+      const min = nativeZoom?.min ?? 1;
+      const clamped = Math.min(max, Math.max(min, next));
+      setZoom(clamped);
+
+      if (nativeZoom) {
+        const track = streamRef.current?.getVideoTracks()[0];
+        void track
+          ?.applyConstraints({ advanced: [{ zoom: clamped }] })
+          .catch(() => {});
+      }
+    },
+    [nativeZoom],
+  );
+
+  const toggleTorch = useCallback(() => {
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!track) return;
+    const next = !torchOn;
+    track
+      .applyConstraints({ advanced: [{ torch: next }] })
+      .then(() => setTorchOn(next))
+      .catch(() => {});
+  }, [torchOn]);
+
+  // --- pinch to zoom ------------------------------------------------------
+
+  function handlePinchDown(e: React.PointerEvent) {
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  }
+
+  function handlePinchMove(e: React.PointerEvent) {
+    const points = pointersRef.current;
+    if (!points.has(e.pointerId)) return;
+    points.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (points.size !== 2) return;
+
+    const [a, b] = [...points.values()];
+    const distance = Math.hypot(a.x - b.x, a.y - b.y);
+    if (!pinchRef.current) {
+      pinchRef.current = { startDistance: distance, startZoom: zoom };
+      return;
+    }
+    applyZoom((distance / pinchRef.current.startDistance) * pinchRef.current.startZoom);
+  }
+
+  function handlePinchUp(e: React.PointerEvent) {
+    pointersRef.current.delete(e.pointerId);
+    if (pointersRef.current.size < 2) pinchRef.current = null;
+  }
 
   const stopRecording = useCallback(() => {
     if (recorderRef.current?.state === "recording") recorderRef.current.stop();
@@ -168,9 +261,36 @@ export function LiveCamera({ onCapture, onClose, onFallback }: LiveCameraProps) 
     const video = videoRef.current;
     if (!video || !video.videoWidth) return;
 
+    // What the guest frames is not the whole sensor frame. The preview is
+    // `object-cover` inside a full-screen box, so a 3:4 camera feed shown in a
+    // ~9:19.5 phone viewport has most of its width cropped away. Drawing the
+    // untouched frame here is what made the photo come out noticeably wider
+    // than the viewfinder — so reproduce that cover crop first.
+    const boxW = video.clientWidth || video.videoWidth;
+    const boxH = video.clientHeight || video.videoHeight;
+    const boxAspect = boxW / boxH;
+    const frameAspect = video.videoWidth / video.videoHeight;
+
+    let sw =
+      frameAspect > boxAspect ? video.videoHeight * boxAspect : video.videoWidth;
+    let sh =
+      frameAspect > boxAspect ? video.videoHeight : video.videoWidth / boxAspect;
+
+    // Native zoom is already baked into the frames the camera produces; the
+    // digital fallback is only a CSS scale on the preview, and it scales the
+    // already-covered box about its centre — so it narrows the crop above.
+    const digitalZoom = nativeZoom ? 1 : zoom;
+    sw /= digitalZoom;
+    sh /= digitalZoom;
+
+    const sx = (video.videoWidth - sw) / 2;
+    const sy = (video.videoHeight - sh) / 2;
+
     const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // Rounded, not truncated: the crop maths is fractional and a canvas
+    // silently floors a non-integer size, which would shave a pixel column.
+    canvas.width = Math.round(sw);
+    canvas.height = Math.round(sh);
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
@@ -180,7 +300,7 @@ export function LiveCamera({ onCapture, onClose, onFallback }: LiveCameraProps) 
       ctx.translate(canvas.width, 0);
       ctx.scale(-1, 1);
     }
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
 
     canvas.toBlob(
       (blob) => {
@@ -190,7 +310,7 @@ export function LiveCamera({ onCapture, onClose, onFallback }: LiveCameraProps) 
       "image/jpeg",
       0.92,
     );
-  }, [facingMode, onCapture]);
+  }, [facingMode, onCapture, nativeZoom, zoom]);
 
   // --- shutter gesture: tap = photo, hold = video -------------------------
 
@@ -247,7 +367,13 @@ export function LiveCamera({ onCapture, onClose, onFallback }: LiveCameraProps) 
   return (
     // h-dvh alongside inset-0: on mobile the dynamic viewport unit tracks the
     // browser chrome collapsing, which a plain inset-0 fixed box does not.
-    <div className="fixed inset-0 z-50 h-dvh bg-black">
+    <div
+      className="fixed inset-0 z-50 h-dvh touch-none bg-black"
+      onPointerDown={handlePinchDown}
+      onPointerMove={handlePinchMove}
+      onPointerUp={handlePinchUp}
+      onPointerCancel={handlePinchUp}
+    >
       <video
         ref={videoRef}
         autoPlay
@@ -255,9 +381,15 @@ export function LiveCamera({ onCapture, onClose, onFallback }: LiveCameraProps) 
         muted
         className={cn(
           "absolute inset-0 size-full object-cover transition-opacity",
-          facingMode === "user" && "-scale-x-100",
           ready ? "opacity-100" : "opacity-0",
         )}
+        // Mirror and zoom share the transform property, so both live here —
+        // as a class, `-scale-x-100` would be silently overridden by an inline
+        // scale and the selfie preview would stop mirroring. Native zoom
+        // happens inside the camera, so only the digital fallback scales.
+        style={{
+          transform: `scaleX(${facingMode === "user" ? -1 : 1}) scale(${nativeZoom ? 1 : zoom})`,
+        }}
       />
 
       {/* Scrims keep the white controls legible over a bright viewfinder. */}
@@ -273,15 +405,46 @@ export function LiveCamera({ onCapture, onClose, onFallback }: LiveCameraProps) 
         >
           <X className="size-5" />
         </button>
+
+        <div className="flex items-center gap-2">
+          {/* Torch is hidden rather than disabled where the device has no
+              such capability — iOS exposes no torch control to the web at
+              all, and a permanently dead button is worse than none. */}
+          {torchAvailable ? (
+            <button
+              type="button"
+              onClick={toggleTorch}
+              aria-label={torchOn ? "Turn flash off" : "Turn flash on"}
+              aria-pressed={torchOn}
+              className={cn(
+                "flex size-10 items-center justify-center rounded-full backdrop-blur-sm transition-colors",
+                torchOn ? "bg-white text-black" : "bg-black/45 text-white",
+              )}
+            >
+              {torchOn ? <Zap className="size-5 fill-current" /> : <ZapOff className="size-5" />}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setFacingMode((m) => (m === "user" ? "environment" : "user"))}
+            className="flex size-10 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm"
+            aria-label="Switch camera"
+          >
+            <RefreshCw className="size-5" />
+          </button>
+        </div>
+      </div>
+
+      {zoom > 1.05 ? (
         <button
           type="button"
-          onClick={() => setFacingMode((m) => (m === "user" ? "environment" : "user"))}
-          className="flex size-10 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm"
-          aria-label="Switch camera"
+          onClick={() => applyZoom(1)}
+          aria-label="Reset zoom"
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 translate-y-32 rounded-full bg-black/55 px-3 py-1 text-xs font-semibold text-white tabular-nums backdrop-blur-sm"
         >
-          <RefreshCw className="size-5" />
+          {zoom.toFixed(1)}×
         </button>
-      </div>
+      ) : null}
 
       <div className="absolute inset-x-0 bottom-0 pb-safe">
         <p className="mb-3 text-center text-xs font-medium text-white/70">

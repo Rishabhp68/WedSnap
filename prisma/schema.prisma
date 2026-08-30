@@ -27,14 +27,15 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  weddingGuests WeddingGuest[]
-  posts         Post[]
-  stories       Story[]
-  comments      Comment[]
-  reactions     Reaction[]
-  messages      Message[]
-  chatMembers   ChatMember[]
-  rsvps         RSVP[]
+  weddingGuests     WeddingGuest[]
+  posts             Post[]
+  stories           Story[]
+  comments          Comment[]
+  reactions         Reaction[]
+  messages          Message[]
+  chatMembers       ChatMember[]
+  rsvps             RSVP[]
+  pushSubscriptions PushSubscription[]
 
   @@index([clerkId])
 }
@@ -55,8 +56,11 @@ model WeddingGuest {
   joinedAt  DateTime  @default(now())
 
   /// Live-map opt-in, scoped per wedding (a guest may attend more than one
-  /// wedding and only want to be visible on this one's map). Off by default.
-  locationSharingEnabled Boolean   @default(false)
+  /// wedding and only want to be visible on this one's map). On by default so
+  /// the map is populated from the first day; a guest can turn it off from
+  /// their profile. Note this only marks intent — nothing is ever shared until
+  /// the browser's own location permission is granted separately.
+  locationSharingEnabled Boolean   @default(true)
   latitude               Float?
   longitude              Float?
   locationUpdatedAt      DateTime?
@@ -350,5 +354,25 @@ model Message {
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([chatRoomId, createdAt])
+  @@index([userId])
+}
+
+/// A browser's Web Push endpoint. One row per device/browser, not per user —
+/// a guest with a phone and a laptop has two, and both should ring.
+///
+/// Keyed by `endpoint` because that is what the push service itself treats as
+/// the subscription's identity: re-subscribing the same browser returns the
+/// same endpoint, so an upsert here replaces rather than accumulates.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  /// Client-generated keys used to encrypt the payload. Opaque to us.
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
 }

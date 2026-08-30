@@ -20,7 +20,16 @@ declare global {
  */
 function poolMax(): number {
   const configured = Number(process.env.DB_POOL_MAX);
-  return Number.isFinite(configured) && configured > 0 ? configured : 10;
+  if (Number.isFinite(configured) && configured > 0) return configured;
+
+  // `next build` forks roughly one worker per core, and each is a separate
+  // process with its own client and its own pool — so the effective ceiling is
+  // (workers x max), around 90 here. Prerendering is sequential inside a
+  // worker, so a big pool buys nothing and just multiplies out until the local
+  // daemon starts refusing connections mid-build.
+  if (process.env.NEXT_PHASE === "phase-production-build") return 2;
+
+  return 10;
 }
 
 function createPrismaClient() {

@@ -71,8 +71,16 @@ export function CommentSheet({
     startTransition(async () => {
       const result = await addCommentAction(postId, content);
       if (result.ok) {
-        setComments((prev) => [...(prev ?? []), result.comment]);
-        setCount((c) => c + 1);
+        // Must dedupe by id here as well as in the Pusher handler: the
+        // broadcast routinely lands before this action resolves, and an
+        // unconditional append is what showed the sender their own comment
+        // twice.
+        setComments((prev) => {
+          const list = prev ?? [];
+          if (list.some((c) => c.id === result.comment.id)) return list;
+          return [...list, result.comment];
+        });
+        setCount(result.count);
       }
     });
   }
