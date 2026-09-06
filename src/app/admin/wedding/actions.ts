@@ -34,13 +34,16 @@ export async function updateWeddingDetailsAction(
       tagline: parsed.data.tagline || null,
       weddingDate: fromZonedTime(parsed.data.weddingDate, parsed.data.timezone),
       timezone: parsed.data.timezone,
-      ...(parsed.data.heroImageUrl ? { heroImageUrl: parsed.data.heroImageUrl } : {}),
-      ...(parsed.data.coverImageUrl ? { coverImageUrl: parsed.data.coverImageUrl } : {}),
+      // Always written, never conditionally skipped: an empty field now means
+      // "remove this image" (the picker has a clear button), and skipping the
+      // write left the previous image in place with no way to get rid of it.
+      heroImageUrl: parsed.data.heroImageUrl || null,
+      coverImageUrl: parsed.data.coverImageUrl || null,
     },
   });
 
   revalidatePath("/");
-  revalidatePath("/admin/wedding");
+  revalidatePath("/admin", "layout");
   return { ok: true };
 }
 
@@ -76,6 +79,6 @@ export async function updateVenueAction(
   });
 
   revalidatePath("/");
-  revalidatePath("/admin/wedding");
+  revalidatePath("/admin", "layout");
   return { ok: true };
 }

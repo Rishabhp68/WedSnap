@@ -142,7 +142,7 @@ export function ChatRoom({ chatRoomId, currentUserId, initialMessages, initialCu
 
   return (
     <div className="flex h-full flex-col">
-      <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+      <div ref={scrollRef} className="no-scrollbar flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {cursor ? <div ref={topSentinelRef} className="h-1" /> : null}
         {messages.length === 0 ? (
           <EmptyState icon={MessageCircle} title="The celebration starts here." />

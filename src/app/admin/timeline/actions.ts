@@ -9,7 +9,9 @@ import type { AdminFormState } from "@/lib/actions/types";
 
 function revalidateTimelinePaths() {
   revalidatePath("/");
-  revalidatePath("/admin/timeline");
+  // "layout" scope so the dynamic /admin/timeline/[id]/edit form refreshes
+  // too — otherwise re-opening a moment shows its previous image.
+  revalidatePath("/admin", "layout");
 }
 
 export async function saveTimelineMomentAction(

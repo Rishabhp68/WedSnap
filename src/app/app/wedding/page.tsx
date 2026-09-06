@@ -6,6 +6,9 @@ import { OurStory } from "@/components/invitation/our-story";
 import { EventsSection } from "@/components/invitation/events-section";
 import { VenueSection } from "@/components/invitation/venue-section";
 import { RsvpForm } from "@/components/invitation/rsvp-form";
+import { EnvelopeIntro } from "@/components/invitation/envelope-intro";
+import { ReplayEnvelopeButton } from "@/components/invitation/replay-envelope-button";
+import { formatEventDate } from "@/lib/utils/dates";
 
 export default async function GuestWeddingPage() {
   const { user, wedding } = await requireGuest();
@@ -19,7 +22,24 @@ export default async function GuestWeddingPage() {
 
   return (
     <div className="pb-6">
-      <Hero wedding={wedding} showActions={false} />
+      {/* Never sealed on arrival — a signed-in guest moving between app tabs
+          shouldn't have to dismiss a cover page to reach their own wedding
+          details. It renders nothing until the button below summons it. */}
+      <EnvelopeIntro
+        partnerOneName={wedding.partnerOneName}
+        partnerTwoName={wedding.partnerTwoName}
+        dateLabel={formatEventDate(wedding.weddingDate, wedding.timezone)}
+        initiallySealed={false}
+      />
+
+      <div className="relative">
+        <Hero wedding={wedding} showActions={false} hasVenue={Boolean(venue)} fullHeight={false} />
+        {/* Over the hero photograph rather than in the app's top bar: that bar
+            is shared by every tab, and the envelope only exists on this one. */}
+        <div className="absolute top-3 right-3 z-20">
+          <ReplayEnvelopeButton className="border border-white/25 bg-black/25 text-white backdrop-blur-sm hover:bg-black/40 hover:text-white" />
+        </div>
+      </div>
       <CountdownSection wedding={wedding} />
       <OurStory moments={timeline} />
       <EventsSection events={events} timezone={wedding.timezone} />

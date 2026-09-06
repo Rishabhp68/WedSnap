@@ -1,73 +1,73 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
 import { Heart } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
-import { toggleReactionAction } from "@/lib/actions/reactions";
-import { getPusherClient } from "@/lib/realtime/pusher-client";
-import { feedChannel, FEED_EVENTS } from "@/lib/realtime/channels";
+import {
+  REACTION_META,
+  topReactionTypes,
+  totalReactions,
+  type ReactionCounts,
+  type ReactionType,
+} from "@/lib/reactions";
+import { useLongPress } from "@/lib/hooks/use-long-press";
 import { cn } from "@/lib/utils";
 
 interface ReactionButtonProps {
-  postId: string;
-  weddingId: string;
-  initialReacted: boolean;
-  initialCount: number;
+  viewerReaction: ReactionType | null;
+  counts: ReactionCounts;
+  onTap: () => void;
+  onLongPress: () => void;
 }
 
-export function ReactionButton({ postId, weddingId, initialReacted, initialCount }: ReactionButtonProps) {
-  const [reacted, setReacted] = useState(initialReacted);
-  const [count, setCount] = useState(initialCount);
-  const [, startTransition] = useTransition();
+/**
+ * Presentational: the parent PostCard owns reaction state, because the photo
+ * itself can open the same picker this button does.
+ */
+export function ReactionButton({ viewerReaction, counts, onTap, onLongPress }: ReactionButtonProps) {
   const shouldReduceMotion = useReducedMotion();
+  const longPress = useLongPress({ onLongPress, onTap });
+  const total = totalReactions(counts);
 
-  // Someone else reacting to this post updates the shared count live — only
-  // the count is ever pushed; "did *I* react" stays local to this viewer.
-  useEffect(() => {
-    const pusher = getPusherClient();
-    const channel = pusher.subscribe(feedChannel(weddingId));
-
-    function handleReactionUpdated(payload: { postId: string; count: number }) {
-      if (payload.postId === postId) setCount(payload.count);
-    }
-
-    channel.bind(FEED_EVENTS.REACTION_UPDATED, handleReactionUpdated);
-    return () => {
-      channel.unbind(FEED_EVENTS.REACTION_UPDATED, handleReactionUpdated);
-    };
-  }, [weddingId, postId]);
-
-  function handleClick() {
-    // Optimistic — a wedding's worth of guests tapping hearts should never
-    // feel like it's waiting on a network round-trip.
-    const next = !reacted;
-    setReacted(next);
-    setCount((c) => c + (next ? 1 : -1));
-
-    startTransition(async () => {
-      const result = await toggleReactionAction(postId);
-      if (!result.ok) {
-        setReacted(!next);
-        setCount((c) => c + (next ? -1 : 1));
-      }
-    });
-  }
+  // One cluster, never the same emoji twice: the viewer's own reaction leads
+  // (it's already counted in `counts`), then the next most-used types.
+  const others = topReactionTypes(counts).filter((type) => type !== viewerReaction);
+  const shown = (viewerReaction ? [viewerReaction, ...others] : others).slice(0, 3);
 
   return (
     <button
       type="button"
-      onClick={handleClick}
-      className="flex items-center gap-1.5 text-sm text-muted-foreground"
-      aria-pressed={reacted}
-      aria-label={reacted ? "Remove reaction" : "React with love"}
+      {...longPress}
+      className="flex touch-none items-center gap-1.5 text-sm text-muted-foreground select-none"
+      aria-pressed={viewerReaction !== null}
+      aria-label={
+        viewerReaction
+          ? `${REACTION_META[viewerReaction].label} — tap to remove, hold to change`
+          : "React — tap to love, hold for more reactions"
+      }
     >
-      <motion.span
-        whileTap={shouldReduceMotion ? undefined : { scale: 1.3 }}
-        transition={{ type: "spring", stiffness: 400, damping: 15 }}
-      >
-        <Heart className={cn("size-4", reacted && "fill-primary text-primary")} />
-      </motion.span>
-      {count}
+      {shown.length > 0 ? (
+        <span className="flex items-center gap-0.5">
+          {shown.map((type) => (
+            <motion.span
+              key={type}
+              initial={shouldReduceMotion ? false : { scale: 0.6 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 400, damping: 15 }}
+              className={cn(
+                "text-base leading-none",
+                // Your own reaction sits slightly proud of the rest.
+                type === viewerReaction && "drop-shadow-sm",
+              )}
+            >
+              {REACTION_META[type].emoji}
+            </motion.span>
+          ))}
+        </span>
+      ) : (
+        <Heart className="size-4" />
+      )}
+
+      <span className={cn(viewerReaction && "font-medium text-foreground")}>{total}</span>
     </button>
   );
 }

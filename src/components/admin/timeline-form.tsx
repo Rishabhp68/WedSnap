@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { AdminForm } from "@/components/admin/admin-form";
+import { ImageField } from "@/components/admin/image-field";
 import { saveTimelineMomentAction } from "@/app/admin/timeline/actions";
 
 export interface TimelineFormDefaults {
@@ -41,10 +42,7 @@ export function TimelineForm({ defaults = {} }: { defaults?: TimelineFormDefault
         </div>
       </div>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="imageUrl">Image URL</Label>
-        <Input id="imageUrl" name="imageUrl" defaultValue={defaults.imageUrl} placeholder="https://..." />
-      </div>
+      <ImageField name="imageUrl" label="Photo" defaultValue={defaults.imageUrl} />
     </AdminForm>
   );
 }

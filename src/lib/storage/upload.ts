@@ -2,7 +2,7 @@ import "server-only";
 import { cloudinary, UPLOAD_FOLDER } from "./cloudinary";
 
 export type StorageResourceType = "image" | "video";
-export type UploadScope = "posts" | "stories" | "avatars";
+export type UploadScope = "posts" | "stories" | "avatars" | "wedding";
 export type DeliveryType = "authenticated" | "upload";
 
 export interface UploadSignatureInput {
@@ -31,13 +31,16 @@ const ALLOWED_FORMATS: Record<StorageResourceType, string> = {
 /**
  * Feed/story photos are private wedding content, so they upload as
  * Cloudinary `authenticated` assets (see getSignedUrl.ts — unreadable
- * without a fresh server-issued signature). A profile avatar is just an
- * identity picture shown wherever a guest's name appears (feed, chat,
- * admin) — treating it as public `upload` avoids re-signing it everywhere
- * it's rendered, the same way Clerk's own avatar images are plain URLs.
+ * without a fresh server-issued signature).
+ *
+ * Avatars and admin-managed "wedding" imagery (hero, cover, event and Our
+ * Story photos) are public by nature — the latter render on the public
+ * invitation page, and both are stored as plain URL strings rather than a
+ * storageKey that gets re-signed per request, so they use public `upload`
+ * delivery.
  */
 function deliveryTypeFor(scope: UploadScope): DeliveryType {
-  return scope === "avatars" ? "upload" : "authenticated";
+  return scope === "avatars" || scope === "wedding" ? "upload" : "authenticated";
 }
 
 /**

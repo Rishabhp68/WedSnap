@@ -8,6 +8,8 @@ import { EventsSection } from "@/components/invitation/events-section";
 import { VenueSection } from "@/components/invitation/venue-section";
 import { RsvpSection } from "@/components/invitation/rsvp-section";
 import { SiteFooter } from "@/components/invitation/site-footer";
+import { EnvelopeIntro, EnvelopeSeenScript } from "@/components/invitation/envelope-intro";
+import { formatEventDate } from "@/lib/utils/dates";
 
 // The invitation rarely changes, so it's served from ISR cache and
 // revalidated every 5 minutes rather than hit the database on every visit —
@@ -24,9 +26,15 @@ export default async function InvitationPage() {
 
   return (
     <div className="flex min-h-dvh flex-col">
+      <EnvelopeSeenScript />
+      <EnvelopeIntro
+        partnerOneName={wedding.partnerOneName}
+        partnerTwoName={wedding.partnerTwoName}
+        dateLabel={formatEventDate(wedding.weddingDate, wedding.timezone)}
+      />
       <SiteHeader wedding={wedding} />
       <main className="flex-1">
-        <Hero wedding={wedding} />
+        <Hero wedding={wedding} hasVenue={Boolean(wedding.venue)} />
         <CountdownSection wedding={wedding} />
         <OurStory moments={timeline} />
         <EventsSection events={events} timezone={wedding.timezone} />

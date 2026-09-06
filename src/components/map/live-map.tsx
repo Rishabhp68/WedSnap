@@ -415,7 +415,7 @@ export function LiveMap({
         </div>
 
         {searching ? (
-          <div className="pointer-events-auto max-h-64 overflow-y-auto rounded-2xl border border-border bg-card/95 p-1.5 shadow-lg backdrop-blur-sm">
+          <div className="no-scrollbar pointer-events-auto max-h-64 overflow-y-auto rounded-2xl border border-border bg-card/95 p-1.5 shadow-lg backdrop-blur-sm">
             {searchResults.length === 0 ? (
               <p className="px-3 py-4 text-center text-xs text-muted-foreground">No guests found.</p>
             ) : (

@@ -127,6 +127,17 @@
   }
   html {
     @apply font-sans scroll-smooth;
+    /* The app is phone-first and meant to read as a native surface, where a
+       scrollbar gutter is never drawn. Only the indicator is hidden — wheel,
+       touch, keyboard and programmatic scrolling all still work, and the
+       page keeps its full width instead of jumping when content grows past
+       one screen. Inner panels opt in separately via .no-scrollbar. */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar {
+    display: none;
   }
   body {
     @apply bg-background text-foreground;
@@ -136,6 +147,13 @@
 @layer utilities {
   .font-display {
     font-family: var(--font-display);
+  }
+
+  /* Set before first paint by EnvelopeSeenScript when the invitation has
+     already been opened this session, so the envelope never flashes back
+     up during hydration. React unmounts it a tick later. */
+  [data-envelope-seen="1"] [data-envelope-intro] {
+    display: none !important;
   }
 
   /* iPhone notch/home-indicator safe areas for full-bleed mobile chrome. */
@@ -155,6 +173,168 @@
   }
   .no-scrollbar::-webkit-scrollbar {
     display: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Petal shower (envelope intro)
+
+   Two nested animations rather than one: the outer element only falls, the
+   inner one sways and flutters. Composing them is what stops the petals from
+   dropping in straight, obviously-identical lines.
+
+   Both animate transform/opacity only, so all 26 petals stay on the
+   compositor — this has to be smooth on a mid-range phone.
+   --------------------------------------------------------------------------- */
+
+.petal-fall {
+  position: absolute;
+  top: 0;
+  /* Gives the tumble below somewhere to happen. Shallow, so petals foreshorten
+     as they turn instead of swinging out like a hinged door. */
+  perspective: 500px;
+  will-change: transform, opacity;
+  animation-name: petal-fall;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+
+.petal-sway {
+  display: block;
+  will-change: transform;
+  animation-name: petal-sway;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+}
+
+.petal-spin {
+  display: block;
+  will-change: transform;
+  animation-name: petal-spin;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes petal-fall {
+  0% {
+    transform: translate3d(0, -14vh, 0);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(0, 108vh, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes petal-sway {
+  from {
+    transform: translate3d(calc(var(--petal-drift) * -1), 0, 0);
+  }
+  to {
+    transform: translate3d(var(--petal-drift), 0, 0);
+  }
+}
+
+/* Tumbling about a tilted axis rather than spinning flat: the petal turns
+   edge-on twice a revolution, which is what a falling petal actually does and
+   what a 2D rotation can never fake. */
+@keyframes petal-spin {
+  from {
+    transform: rotate3d(1, 0.85, 0.25, 0deg);
+  }
+  to {
+    transform: rotate3d(1, 0.85, 0.25, 360deg);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Cannon bursts (envelope intro)
+
+   Petals and foil fired up from the bottom corners as the invitation is
+   revealed, arcing over and falling back off the bottom of the screen.
+
+   The trajectory is split across two elements on purpose. Sideways travel
+   wants a near-constant speed that only bleeds off to air drag; vertical wants
+   to decelerate into the apex and then accelerate away from it. One element
+   can only carry one easing, and a single easing over both axes is what makes
+   scripted confetti read as sliding along a diagonal rather than being thrown.
+   --------------------------------------------------------------------------- */
+
+.burst {
+  position: absolute;
+  /* Launched from just off the bottom edge, so the cannon's mouth is out of
+     frame and scraps enter the screen already travelling. */
+  bottom: -6vh;
+  will-change: transform, opacity;
+  animation-name: burst-x, burst-fade;
+  animation-timing-function: cubic-bezier(0.12, 0.62, 0.3, 1), linear;
+  animation-fill-mode: both, both;
+}
+
+.burst-arc {
+  display: block;
+  will-change: transform;
+  animation-name: burst-y;
+  animation-fill-mode: both;
+}
+
+/* Foil scrap: a plain box, since at 8px the shape is carried by the gradient
+   and the tumble, and 40-odd more SVG paths would not buy anything. */
+.glitter {
+  display: block;
+  border-radius: 1px;
+}
+
+.glitter--round {
+  border-radius: 50%;
+}
+
+@keyframes burst-x {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(var(--burst-drift), 0, 0);
+  }
+}
+
+@keyframes burst-y {
+  0% {
+    transform: translate3d(0, 0, 0);
+    /* Decelerating into the apex... */
+    animation-timing-function: cubic-bezier(0.05, 0.7, 0.3, 1);
+  }
+  40% {
+    transform: translate3d(0, var(--burst-peak), 0);
+    /* ...then accelerating out of it, which is the whole illusion of weight. */
+    animation-timing-function: cubic-bezier(0.55, 0, 0.85, 0.55);
+  }
+  100% {
+    transform: translate3d(0, 22vh, 0);
+  }
+}
+
+/* Starts at zero so that `animation-fill-mode: both` doesn't park a heap of
+   visible scraps along the bottom edge during the 2.2s pre-launch delay. */
+@keyframes burst-fade {
+  0% {
+    opacity: 0;
+  }
+  2% {
+    opacity: 1;
+  }
+  74% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
   }
 }
 

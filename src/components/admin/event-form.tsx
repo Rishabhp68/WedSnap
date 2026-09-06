@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { AdminForm } from "@/components/admin/admin-form";
+import { ImageField } from "@/components/admin/image-field";
 import { saveEventAction } from "@/app/admin/events/actions";
 
 export interface EventFormDefaults {
@@ -67,15 +68,11 @@ export function EventForm({ defaults = {} }: { defaults?: EventFormDefaults }) {
         <Textarea id="venueAddress" name="venueAddress" defaultValue={defaults.venueAddress} rows={2} required />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label htmlFor="imageUrl">Image URL</Label>
-          <Input id="imageUrl" name="imageUrl" defaultValue={defaults.imageUrl} placeholder="https://..." />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="mapUrl">Map link</Label>
-          <Input id="mapUrl" name="mapUrl" defaultValue={defaults.mapUrl} placeholder="https://maps.google.com/..." />
-        </div>
+      <ImageField name="imageUrl" label="Event image" defaultValue={defaults.imageUrl} />
+
+      <div className="space-y-1.5">
+        <Label htmlFor="mapUrl">Map link</Label>
+        <Input id="mapUrl" name="mapUrl" defaultValue={defaults.mapUrl} placeholder="https://maps.google.com/..." />
       </div>
 
       <div className="space-y-1.5">

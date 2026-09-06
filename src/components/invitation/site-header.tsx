@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Wedding } from "@/generated/prisma/client";
 import { JoinCelebrationCta } from "./join-celebration-cta";
+import { ReplayEnvelopeButton } from "./replay-envelope-button";
 
 const NAV_LINKS = [
   { href: "#our-story", label: "Our Story" },
@@ -27,7 +28,10 @@ export function SiteHeader({ wedding }: { wedding: Wedding }) {
           ))}
         </nav>
 
-        <JoinCelebrationCta variant="secondary" className="h-9 rounded-full px-4 text-sm" />
+        <div className="flex items-center gap-1">
+          <ReplayEnvelopeButton />
+          <JoinCelebrationCta variant="secondary" className="h-9 rounded-full px-4 text-sm" />
+        </div>
       </div>
     </header>
   );

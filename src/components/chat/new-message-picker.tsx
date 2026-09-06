@@ -69,7 +69,7 @@ export function NewMessagePicker({ guests }: { guests: Guest[] }) {
           />
         </div>
 
-        <div className="max-h-[60vh] flex-1 overflow-y-auto px-4 pb-safe">
+        <div className="no-scrollbar max-h-[60vh] flex-1 overflow-y-auto px-4 pb-safe">
           {filtered.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">No guests found.</p>
           ) : (

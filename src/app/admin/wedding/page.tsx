@@ -2,6 +2,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { requireAdmin } from "@/lib/auth/current-guest";
 import { prisma } from "@/lib/db/client";
 import { AdminForm } from "@/components/admin/admin-form";
+import { ImageField } from "@/components/admin/image-field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -41,14 +42,8 @@ export default async function AdminWeddingPage() {
               <Input id="timezone" name="timezone" defaultValue={wedding.timezone} required />
             </div>
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="heroImageUrl">Hero image URL</Label>
-            <Input id="heroImageUrl" name="heroImageUrl" defaultValue={wedding.heroImageUrl ?? ""} placeholder="https://..." />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="coverImageUrl">Cover image URL</Label>
-            <Input id="coverImageUrl" name="coverImageUrl" defaultValue={wedding.coverImageUrl ?? ""} placeholder="https://..." />
-          </div>
+          <ImageField name="heroImageUrl" label="Hero image" defaultValue={wedding.heroImageUrl ?? ""} />
+          <ImageField name="coverImageUrl" label="Cover image" defaultValue={wedding.coverImageUrl ?? ""} />
         </AdminForm>
       </section>
 

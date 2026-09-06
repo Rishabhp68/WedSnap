@@ -11,7 +11,11 @@ import type { AdminFormState } from "@/lib/actions/types";
 function revalidateEventPaths() {
   revalidatePath("/");
   revalidatePath("/app/wedding");
-  revalidatePath("/admin/events");
+  // "layout" scope covers every page under /admin, including the dynamic
+  // /admin/events/[id]/edit route. Revalidating only "/admin/events" left
+  // the edit form itself serving a cached copy, so re-opening an event you'd
+  // just given a new image still showed the old one.
+  revalidatePath("/admin", "layout");
 }
 
 export async function saveEventAction(

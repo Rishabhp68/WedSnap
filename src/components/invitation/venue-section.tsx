@@ -11,7 +11,10 @@ export function VenueSection({ venue }: { venue: Venue | null }) {
   const embedUrl = `https://www.google.com/maps?q=${encodeURIComponent(venue.address)}&output=embed`;
 
   return (
-    <section id="venue" className="bg-secondary/40 py-20 sm:py-28">
+    // scroll-mt clears the sticky site header, so jumping to #venue — from the
+    // hero's Directions button or the header nav — lands on the heading rather
+    // than tucking it underneath.
+    <section id="venue" className="scroll-mt-20 bg-secondary/40 py-20 sm:py-28">
       <div className="mx-auto max-w-4xl px-6 sm:px-8">
         <Reveal>
           <p className="text-center text-xs font-medium uppercase tracking-[0.3em] text-accent-foreground/70">

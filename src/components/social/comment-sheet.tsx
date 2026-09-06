@@ -101,7 +101,7 @@ export function CommentSheet({
           <DrawerTitle>Comments</DrawerTitle>
         </DrawerHeader>
 
-        <div className="flex-1 space-y-4 overflow-y-auto px-4 py-3">
+        <div className="no-scrollbar flex-1 space-y-4 overflow-y-auto px-4 py-3">
           {comments === null ? (
             <p className="py-8 text-center text-sm text-muted-foreground">Loading...</p>
           ) : comments.length === 0 ? (

@@ -80,8 +80,10 @@ export async function createPostAction(
   await pusherServer.trigger(feedChannel(wedding.id), FEED_EVENTS.NEW_POST, {
     ...post,
     media: post.media.map((m) => ({ ...m, url: resolveMediaUrl(m, { width: 1080 }) })),
-    _count: { comments: 0, reactions: 0 },
-    viewerHasReacted: false,
+    _count: { comments: 0 },
+    // Brand new post: nobody has reacted yet, including whoever receives this.
+    viewerReaction: null,
+    reactionCounts: {},
   });
 
   // Rings every other guest's phone. Deliberately after the Pusher trigger and
