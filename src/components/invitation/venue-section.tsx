@@ -2,6 +2,7 @@ import { Info, Navigation, ParkingCircle } from "lucide-react";
 import type { Venue } from "@/generated/prisma/client";
 import { Button } from "@/components/ui/button";
 import { Reveal } from "@/components/motion/reveal";
+import { Markdown } from "@/components/ui/markdown";
 
 export function VenueSection({ venue }: { venue: Venue | null }) {
   if (!venue) return null;
@@ -54,16 +55,16 @@ export function VenueSection({ venue }: { venue: Venue | null }) {
                   <ParkingCircle className="size-4 text-accent-foreground/70" />
                   Parking
                 </div>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{venue.parkingInfo}</p>
+                <Markdown className="mt-2 text-sm text-muted-foreground">{venue.parkingInfo}</Markdown>
               </div>
             ) : null}
             {venue.instructions ? (
               <div className="rounded-2xl border border-border bg-card p-5">
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <Info className="size-4 text-accent-foreground/70" />
-                  Good to know
+                  How To Reach
                 </div>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{venue.instructions}</p>
+                <Markdown className="mt-2 text-sm text-muted-foreground">{venue.instructions}</Markdown>
               </div>
             ) : null}
           </div>

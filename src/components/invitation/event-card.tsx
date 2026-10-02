@@ -2,6 +2,7 @@ import Image from "next/image";
 import { CalendarPlus, Clock, MapPin, Shirt } from "lucide-react";
 import type { Event } from "@/generated/prisma/client";
 import { Button } from "@/components/ui/button";
+import { Markdown } from "@/components/ui/markdown";
 import { formatEventDate, formatEventTimeRange } from "@/lib/utils/dates";
 import { buildGoogleCalendarUrl } from "@/lib/utils/calendar";
 
@@ -37,7 +38,7 @@ export function EventCard({ event, timezone }: { event: Event; timezone: string 
         </div>
 
         {event.description ? (
-          <p className="text-sm leading-relaxed text-muted-foreground">{event.description}</p>
+          <Markdown className="text-sm text-muted-foreground">{event.description}</Markdown>
         ) : null}
 
         <dl className="space-y-2 text-sm text-foreground/90">

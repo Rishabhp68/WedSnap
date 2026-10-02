@@ -1,6 +1,7 @@
 import Image from "next/image";
 import type { TimelineMoment } from "@/generated/prisma/client";
 import { Reveal } from "@/components/motion/reveal";
+import { Markdown } from "@/components/ui/markdown";
 
 export function OurStory({ moments }: { moments: TimelineMoment[] }) {
   if (moments.length === 0) return null;
@@ -34,9 +35,9 @@ export function OurStory({ moments }: { moments: TimelineMoment[] }) {
                   </div>
                 ) : null}
                 <h3 className="font-display text-xl text-foreground sm:text-2xl">{moment.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground sm:text-base">
+                <Markdown className="mt-2 text-sm text-muted-foreground sm:text-base">
                   {moment.description}
-                </p>
+                </Markdown>
               </li>
             </Reveal>
           ))}

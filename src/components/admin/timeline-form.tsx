@@ -2,6 +2,7 @@
 
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { MarkdownHint } from "@/components/admin/markdown-hint";
 import { Label } from "@/components/ui/label";
 import { AdminForm } from "@/components/admin/admin-form";
 import { ImageField } from "@/components/admin/image-field";
@@ -28,7 +29,8 @@ export function TimelineForm({ defaults = {} }: { defaults?: TimelineFormDefault
 
       <div className="space-y-1.5">
         <Label htmlFor="description">Description</Label>
-        <Textarea id="description" name="description" defaultValue={defaults.description} rows={3} required />
+        <Textarea id="description" name="description" defaultValue={defaults.description} rows={4} required />
+        <MarkdownHint />
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

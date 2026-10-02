@@ -29,6 +29,8 @@ export default async function GuestWeddingPage() {
         partnerOneName={wedding.partnerOneName}
         partnerTwoName={wedding.partnerTwoName}
         dateLabel={formatEventDate(wedding.weddingDate, wedding.timezone)}
+        venueName={venue?.name}
+        videoUrl={wedding.saveTheDateVideoUrl}
         initiallySealed={false}
       />
 

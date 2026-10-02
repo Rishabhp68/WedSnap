@@ -37,12 +37,26 @@ if (!host) {
 
 // allowedDevOrigins is static config, so a new network (new IP) needs it updated
 // or Next will block the phone's cross-origin requests for CSS/JS/HMR.
+//
+// Matched per dot-separated segment with `*` as a single-segment wildcard, the
+// way Next itself matches these — a plain substring check would cry wolf on an
+// entry like "192.168.1.*", which covers this host perfectly well.
+function originCovers(pattern, address) {
+  const patternParts = pattern.split(".");
+  const addressParts = address.split(".");
+  if (patternParts.length !== addressParts.length) return false;
+  return patternParts.every((part, i) => part === "*" || part === addressParts[i]);
+}
+
 try {
   const config = readFileSync(new URL("../next.config.ts", import.meta.url), "utf8");
-  if (!config.includes(host)) {
+  const declared = config.match(/allowedDevOrigins\s*:\s*\[([^\]]*)\]/)?.[1] ?? "";
+  const origins = [...declared.matchAll(/["'`]([^"'`]+)["'`]/g)].map((m) => m[1]);
+
+  if (!origins.some((origin) => originCovers(origin, host))) {
     console.warn(
-      `\n  Warning: ${host} is not in allowedDevOrigins in next.config.ts.\n` +
-        `  Add it or the phone will fail to load CSS/JS.\n`,
+      `\n  Warning: ${host} is not covered by allowedDevOrigins in next.config.ts.\n` +
+        `  Add it or the phone will load the page with no CSS and no text.\n`,
     );
   }
 } catch {

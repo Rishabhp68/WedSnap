@@ -21,6 +21,7 @@ export async function updateWeddingDetailsAction(
     timezone: formData.get("timezone"),
     heroImageUrl: formData.get("heroImageUrl") || undefined,
     coverImageUrl: formData.get("coverImageUrl") || undefined,
+    saveTheDateVideoUrl: formData.get("saveTheDateVideoUrl") || undefined,
   });
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Please check the form." };
@@ -39,6 +40,7 @@ export async function updateWeddingDetailsAction(
       // write left the previous image in place with no way to get rid of it.
       heroImageUrl: parsed.data.heroImageUrl || null,
       coverImageUrl: parsed.data.coverImageUrl || null,
+      saveTheDateVideoUrl: parsed.data.saveTheDateVideoUrl || null,
     },
   });
 

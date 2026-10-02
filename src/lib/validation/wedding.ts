@@ -12,6 +12,7 @@ export const updateWeddingDetailsSchema = z.object({
   timezone: z.string().min(1),
   heroImageUrl: z.string().url().optional().or(z.literal("")),
   coverImageUrl: z.string().url().optional().or(z.literal("")),
+  saveTheDateVideoUrl: z.string().url().optional().or(z.literal("")),
 });
 
 export const updateVenueSchema = z.object({

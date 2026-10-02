@@ -3,8 +3,15 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // Lets the dev server serve CSS/JS/HMR to a phone testing over the LAN IP
   // or through an ngrok tunnel (Next.js blocks cross-origin dev requests by
-  // default). Update these if your local IP or ngrok URL changes.
-  allowedDevOrigins: ["192.168.1.25", "divinity-blubber-crushing.ngrok-free.dev"],
+  // default, and the symptom is a page that loads but renders unstyled with
+  // no text — not an obvious error).
+  //
+  // The subnet is wildcarded rather than pinned to one address because the
+  // router hands out a new IP every so often, and a stale entry here breaks
+  // phone testing in a way that looks like a CSS bug. Next matches these
+  // segment by segment, so "192.168.1.*" covers the whole subnet and nothing
+  // beyond it. Dev-only config; it has no effect on a production build.
+  allowedDevOrigins: ["192.168.1.*", "divinity-blubber-crushing.ngrok-free.dev"],
   images: {
     // Admins paste image URLs from arbitrary sites (the venue's website, a
     // photographer's gallery, Google Maps) into /admin, and next/image

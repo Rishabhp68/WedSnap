@@ -3,8 +3,10 @@ import { requireAdmin } from "@/lib/auth/current-guest";
 import { prisma } from "@/lib/db/client";
 import { AdminForm } from "@/components/admin/admin-form";
 import { ImageField } from "@/components/admin/image-field";
+import { VideoField } from "@/components/admin/video-field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { MarkdownHint } from "@/components/admin/markdown-hint";
 import { Label } from "@/components/ui/label";
 import { updateWeddingDetailsAction, updateVenueAction } from "./actions";
 
@@ -44,6 +46,12 @@ export default async function AdminWeddingPage() {
           </div>
           <ImageField name="heroImageUrl" label="Hero image" defaultValue={wedding.heroImageUrl ?? ""} />
           <ImageField name="coverImageUrl" label="Cover image" defaultValue={wedding.coverImageUrl ?? ""} />
+          <VideoField
+            name="saveTheDateVideoUrl"
+            label="Save the date film"
+            description="Plays full screen once a guest opens the envelope, then the invitation appears. Leave empty to go straight to the invitation."
+            defaultValue={wedding.saveTheDateVideoUrl ?? ""}
+          />
         </AdminForm>
       </section>
 
@@ -64,11 +72,13 @@ export default async function AdminWeddingPage() {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="parkingInfo">Parking info</Label>
-            <Textarea id="parkingInfo" name="parkingInfo" defaultValue={venue?.parkingInfo ?? ""} rows={2} />
+            <Textarea id="parkingInfo" name="parkingInfo" defaultValue={venue?.parkingInfo ?? ""} rows={4} />
+            <MarkdownHint />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="instructions">Additional instructions</Label>
-            <Textarea id="instructions" name="instructions" defaultValue={venue?.instructions ?? ""} rows={2} />
+            <Textarea id="instructions" name="instructions" defaultValue={venue?.instructions ?? ""} rows={4} />
+            <MarkdownHint />
           </div>
         </AdminForm>
       </section>

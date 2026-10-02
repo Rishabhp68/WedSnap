@@ -31,6 +31,8 @@ export default async function InvitationPage() {
         partnerOneName={wedding.partnerOneName}
         partnerTwoName={wedding.partnerTwoName}
         dateLabel={formatEventDate(wedding.weddingDate, wedding.timezone)}
+        venueName={wedding.venue?.name}
+        videoUrl={wedding.saveTheDateVideoUrl}
       />
       <SiteHeader wedding={wedding} />
       <main className="flex-1">

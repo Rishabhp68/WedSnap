@@ -98,6 +98,9 @@ model Wedding {
   timezone       String   @default("Asia/Kolkata")
   heroImageUrl   String?
   coverImageUrl  String?
+  /// Optional save-the-date film, played full screen once the envelope opens.
+  /// Null means there isn't one, and the invitation is revealed directly.
+  saveTheDateVideoUrl String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
